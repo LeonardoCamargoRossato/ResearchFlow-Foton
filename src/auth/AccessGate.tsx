@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import App from '../App'
+import { InviteEnrollment } from '../invites/InviteEnrollment'
 import type { AccessRequest, ResearchFlowUser } from '../models/ResearchFlowUser'
 import { CoordinatorDashboard, DirectorDashboard } from '../governance/GovernanceDashboard'
 import { authService, supabase, supabaseConfigured } from '../services/supabase'
 import { accessService } from './accessService'
 
 type Bootstrap = 'loading' | 'guest' | 'restricted' | 'authorized' | 'error'
+
+const inviteTokenFromLocation = () => {
+  const match = window.location.hash.match(/^#\/invite\/([^/?#]+)/i)
+  if (match?.[1]) return decodeURIComponent(match[1])
+  return authService.getPendingInviteToken()
+}
 
 function AccessRestricted({ session, onRetry }: { session: Session; onRetry: () => void }) {
   const [message, setMessage] = useState('')
@@ -63,6 +70,7 @@ export default function AccessGate() {
   const [profile, setProfile] = useState<ResearchFlowUser | null>(null)
   const [state, setState] = useState<Bootstrap>('loading')
   const [error, setError] = useState('')
+  const [inviteToken, setInviteToken] = useState<string | null>(() => inviteTokenFromLocation())
 
   const bootstrap = async (nextSession?: Session | null) => {
     setState('loading')
@@ -70,6 +78,15 @@ export default function AccessGate() {
     try {
       const active = nextSession === undefined ? await authService.getSession() : nextSession
       setSession(active)
+
+      const token = inviteTokenFromLocation()
+      setInviteToken(token)
+      if (token) {
+        setProfile(null)
+        setState(active ? 'authorized' : 'guest')
+        return
+      }
+
       if (!active) {
         setProfile(null)
         setState('guest')
@@ -91,16 +108,22 @@ export default function AccessGate() {
     }
     void bootstrap()
     const { data } = supabase.auth.onAuthStateChange((_event, next) => void bootstrap(next))
-    return () => data.subscription.unsubscribe()
+    const onHashChange = () => void bootstrap()
+    window.addEventListener('hashchange', onHashChange)
+    return () => {
+      data.subscription.unsubscribe()
+      window.removeEventListener('hashchange', onHashChange)
+    }
   }, [])
 
+  if (inviteToken) return <InviteEnrollment token={inviteToken} session={session}/>
   if (state === 'loading') return <div className="app-loading">Validando acesso ao ResearchFlow…</div>
   if (state === 'guest') return <App />
   if (state === 'restricted' && session) return <AccessRestricted session={session} onRetry={() => void bootstrap(session)}/>
   if (state === 'error') return <div className="access-page"><div className="access-card">
     <h1>Não foi possível validar o acesso</h1>
     <p>{error}</p>
-    <p className="muted">Se a V3 já foi aplicada, execute também o hotfix <code>researchflow_v3_1_claim_membership_fix.sql</code> no Supabase e tente novamente.</p>
+    <p className="muted">Verifique se as migrations mais recentes do ResearchFlow foram aplicadas no Supabase e tente novamente.</p>
     <div className="access-actions">
       {session && <button className="secondary-button" onClick={() => void bootstrap(session)}>Tentar novamente</button>}
       <button className="secondary-button" onClick={() => void authService.signOut()}>Sair</button>
@@ -113,7 +136,7 @@ export default function AccessGate() {
 
   return <div className="access-page"><div className="access-card">
     <h1>Papel de acesso não suportado</h1>
-    <p>O ResearchFlow V3 possui apenas três níveis funcionais: Diretor, Coordenador de Laboratório e Pesquisador.</p>
+    <p>O ResearchFlow possui três níveis funcionais: Diretor, Coordenador de Laboratório e Pesquisador.</p>
     <button className="secondary-button" onClick={() => void authService.signOut()}>Sair</button>
   </div></div>
 }
