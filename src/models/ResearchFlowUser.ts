@@ -2,6 +2,8 @@ export type ResearchFlowRole = 'researcher' | 'lab_coordinator' | 'director'
 
 export type MembershipStatus = 'invited' | 'active' | 'suspended' | 'revoked'
 export type GovernanceReportType = 'researcher' | 'coordinator'
+export type InstitutionalRole = ResearchFlowRole | 'other'
+export type AccessStatus = 'not_invited' | 'invite_created' | 'pending_acceptance' | 'active' | 'suspended' | 'revoked'
 
 export interface ResearchFlowUser {
   authUserId: string
@@ -32,6 +34,7 @@ export interface AccessRequest {
 export interface GovernanceMembership {
   id: string
   auth_user_id: string | null
+  person_id?: string | null
   email: string
   full_name: string | null
   role: ResearchFlowRole
@@ -46,8 +49,10 @@ export interface GovernanceLaboratory {
   id: string
   name: string
   slug: string
+  subtitle?: string | null
   description: string | null
   active: boolean
+  institutional?: boolean
   created_at: string
   vertical_id: string
 }
@@ -66,4 +71,63 @@ export interface GovernanceReport {
   audio_path: string | null
   deleted_by_researcher: boolean
   report_type: GovernanceReportType
+}
+
+export interface InstitutionalPerson {
+  id: string
+  slug: string
+  full_name: string
+  title_prefix: string | null
+  display_name: string
+  institutional_role: InstitutionalRole
+  primary_laboratory_id: string | null
+  email: string | null
+  auth_user_id: string | null
+  access_status: AccessStatus
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface LaboratoryCoordinatorRelation {
+  laboratory_id: string
+  person_id: string
+  is_primary: boolean
+  active: boolean
+}
+
+export interface ResearchFlowInvite {
+  id: string
+  person_id: string
+  intended_role: ResearchFlowRole
+  laboratory_id: string | null
+  status: 'active' | 'accepted' | 'revoked' | 'expired'
+  created_by: string
+  created_at: string
+  expires_at: string
+  accepted_at: string | null
+  accepted_auth_user_id: string | null
+  accepted_email: string | null
+  revoked_at: string | null
+  revoked_by: string | null
+}
+
+export interface InvitePreview {
+  valid: boolean
+  invite_id: string | null
+  person_id: string | null
+  display_name: string | null
+  title_prefix: string | null
+  intended_role: ResearchFlowRole | null
+  laboratory_id: string | null
+  laboratory_name: string | null
+  invite_status: 'active' | 'accepted' | 'revoked' | 'expired' | 'invalid'
+  expires_at: string | null
+}
+
+export interface InviteAcceptance {
+  display_name: string
+  role: ResearchFlowRole
+  laboratory_name: string | null
+  verified_email: string
 }
