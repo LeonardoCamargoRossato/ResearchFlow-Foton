@@ -1,8 +1,8 @@
-# ResearchFlow V3 — rollout and acceptance test
+# ResearchFlow — rollout and acceptance test
 
 ## Goal
 
-V3 has exactly three functional levels:
+ResearchFlow has exactly three functional levels:
 
 1. Director
 2. Laboratory Coordinator
@@ -18,13 +18,16 @@ In Supabase **SQL Editor**, run in this order if not already applied:
 supabase/researchflow_v1.sql
 supabase/researchflow_v2_governance.sql
 supabase/researchflow_v3_three_levels.sql
+supabase/researchflow_v3_1_claim_membership_fix.sql
+supabase/researchflow_v3_2_personal_library_fix.sql
+supabase/researchflow_v3_3_researcher_write_fix.sql
+supabase/researchflow_v4_coordinator_workspace.sql
+supabase/researchflow_v4_1_director_email.sql
 ```
 
-V3 is incremental and does not replace V1/V2 history.
+The migrations are incremental and preserve previous history.
 
-## 2. V3 seed
-
-The V3 migration creates/updates:
+## 2. Current memberships
 
 ### Project / Laboratory
 
@@ -33,9 +36,11 @@ The V3 migration creates/updates:
 
 ### Director
 
-- `leonardo.rossato@institutofoton.com.br`
+- `institutofotonmais@gmail.com`
 - role: `director`
 - scope: entire ResearchFlow
+
+The former Director membership `leonardo.rossato@institutofoton.com.br` is revoked by V4.1.
 
 ### Laboratory Coordinator
 
@@ -49,11 +54,11 @@ The V3 migration creates/updates:
 - role: `researcher`
 - laboratory: Quântica nos Negócios
 
-The seed preserves an existing valid `auth_user_id`. If it is null, the next Google login is linked automatically by `researchflow_claim_membership()` using the verified Supabase JWT email.
+If the current Director membership has no `auth_user_id`, the next Google login is linked automatically by `researchflow_claim_membership()` using the verified Supabase JWT email. V4.1 also links it immediately if the Google account already exists in `auth.users`.
 
 ## 3. Existing pending access request
 
-A pending access request matching one of the three seeded emails is marked approved by the migration. It does not block the seeded membership.
+A pending access request matching an activated membership may be marked approved by the relevant migration. It does not block an active membership.
 
 ## 4. RLS acceptance
 
@@ -65,7 +70,7 @@ Log in as:
 
 Expected:
 
-- existing Researcher Dashboard opens;
+- Researcher Dashboard opens;
 - only Novo Relato and Meus Relatos workflow is available;
 - own reports are visible;
 - direct queries cannot return another researcher's reports.
@@ -82,15 +87,15 @@ Expected:
 - only Quântica nos Negócios is visible;
 - researcher `leo.c.rossato@gmail.com` is visible;
 - coordinator can add/update/deactivate researchers in this laboratory;
-- report library aggregates only this laboratory's researchers;
-- audio/transcript access is read-only;
+- report library aggregates only this laboratory's researchers plus own coordinator reports;
+- researcher audio/transcript access is read-only;
 - another laboratory is not returned by direct Supabase queries.
 
 ### Director
 
 Log in as:
 
-`leonardo.rossato@institutofoton.com.br`
+`institutofotonmais@gmail.com`
 
 Expected:
 
@@ -102,9 +107,11 @@ Expected:
 - all authorized institutional reports are visible read-only;
 - access requests can be approved/rejected.
 
+The former Director account must no longer receive active Director authorization.
+
 ## 5. Management RPCs
 
-V3 creates checked `SECURITY DEFINER` functions:
+The application uses checked `SECURITY DEFINER` functions for privileged operations, including:
 
 ```text
 researchflow_create_laboratory(...)
@@ -173,4 +180,4 @@ https://leonardocamargorossato.github.io/ResearchFlow-Foton/
 
 ## Important
 
-Committing the SQL migration to GitHub does not execute it inside Supabase. The migration must be applied to the actual Supabase project before the V3 role/routing acceptance test can succeed against production data.
+Committing a SQL migration to GitHub does not execute it inside Supabase. Apply `supabase/researchflow_v4_1_director_email.sql` to the actual Supabase project before testing `institutofotonmais@gmail.com` as Director.
