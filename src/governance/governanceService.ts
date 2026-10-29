@@ -48,6 +48,27 @@ export const governanceService = {
     return (data ?? []) as GovernanceReport[]
   },
 
+  async listDirectorLaboratories(): Promise<GovernanceLaboratory[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_laboratories')
+    if (error) throw new Error(`Laboratórios: ${error.message}`)
+    return (data ?? []) as GovernanceLaboratory[]
+  },
+
+  async listDirectorMemberships(): Promise<GovernanceMembership[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_memberships')
+    if (error) throw new Error(`Memberships: ${error.message}`)
+    return (data ?? []) as GovernanceMembership[]
+  },
+
+  async listDirectorReports(): Promise<GovernanceReport[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_reports')
+    if (error) throw new Error(`Relatos: ${error.message}`)
+    return (data ?? []) as GovernanceReport[]
+  },
+
   async getCoordinatorLaboratory(): Promise<GovernanceLaboratory | null> {
     const client = requireClient()
     const { data, error } = await client.rpc('researchflow_coordinator_laboratory')
