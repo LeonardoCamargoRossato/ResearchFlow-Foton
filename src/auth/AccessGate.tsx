@@ -100,8 +100,11 @@ export default function AccessGate() {
   if (state === 'error') return <div className="access-page"><div className="access-card">
     <h1>Não foi possível validar o acesso</h1>
     <p>{error}</p>
-    <p className="muted">A governança V3 requer a migração <code>researchflow_v3_three_levels.sql</code> aplicada no Supabase.</p>
-    <button className="secondary-button" onClick={() => void authService.signOut()}>Sair</button>
+    <p className="muted">Se a V3 já foi aplicada, execute também o hotfix <code>researchflow_v3_1_claim_membership_fix.sql</code> no Supabase e tente novamente.</p>
+    <div className="access-actions">
+      {session && <button className="secondary-button" onClick={() => void bootstrap(session)}>Tentar novamente</button>}
+      <button className="secondary-button" onClick={() => void authService.signOut()}>Sair</button>
+    </div>
   </div></div>
 
   if (profile?.role === 'researcher') return <App />
