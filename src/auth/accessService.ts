@@ -41,7 +41,7 @@ export const accessService = {
 
   async requestAccess(user: User, message: string): Promise<AccessRequest> {
     const client = requireClient()
-    const existing = await this.getPendingRequest(user.id)
+    const existing = await accessService.getPendingRequest(user.id)
     if (existing) return existing
     const payload = {
       auth_user_id: user.id,
@@ -67,6 +67,13 @@ export const accessService = {
     const { data, error } = await client.from('research_reports').select('id,user_id,researcher_name,created_at,duration_seconds,transcript,transcript_status,status,tag,audio_path,deleted_by_researcher').order('created_at', { ascending: false }).limit(100)
     if (error) throw error
     return data ?? []
+  },
+
+  async createSignedAudioUrl(audioPath: string): Promise<string | null> {
+    const client = requireClient()
+    const { data, error } = await client.storage.from('research-audio').createSignedUrl(audioPath, 3600)
+    if (error) throw error
+    return data?.signedUrl ?? null
   },
 
   async listAccessRequests(): Promise<AccessRequest[]> {
