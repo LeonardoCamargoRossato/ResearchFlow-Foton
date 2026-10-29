@@ -68,7 +68,7 @@ export const accessService = {
 
   async listAccessRequests(): Promise<AccessRequest[]> {
     const client = requireClient()
-    const { data, error } = await client.from('access_requests').select('*').order('requested_at', { ascending: false })
+    const { data, error } = await client.rpc('researchflow_director_access_requests')
     if (error) throw supabaseError(error)
     return (data ?? []) as AccessRequest[]
   },
