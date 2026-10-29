@@ -1,3 +1,4 @@
+import type { WeeklyReportDraft } from '../components/WeeklyReportRecorder'
 import type {
   GovernanceLaboratory,
   GovernanceMembership,
@@ -6,10 +7,14 @@ import type {
 } from '../models/ResearchFlowUser'
 import { supabase } from '../services/supabase'
 
+const BUCKET = 'research-audio'
+
 const requireClient = () => {
   if (!supabase) throw new Error('Supabase não configurado.')
   return supabase
 }
+
+const extensionFor = (mime = '') => mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm'
 
 export const governanceService = {
   async listLaboratories(): Promise<GovernanceLaboratory[]> {
@@ -36,18 +41,78 @@ export const governanceService = {
     const client = requireClient()
     const { data, error } = await client
       .from('research_reports')
-      .select('id,user_id,researcher_name,created_at,recording_date,duration_seconds,transcript,transcript_status,status,tag,audio_path,deleted_by_researcher')
+      .select('id,user_id,researcher_name,created_at,recording_date,duration_seconds,transcript,transcript_status,status,tag,audio_path,deleted_by_researcher,report_type')
       .order('created_at', { ascending: false })
       .limit(500)
     if (error) throw error
     return (data ?? []) as GovernanceReport[]
   },
 
+  async getCoordinatorLaboratory(): Promise<GovernanceLaboratory | null> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_coordinator_laboratory')
+    if (error) throw new Error(`Laboratório: ${error.message}`)
+    return ((data ?? [])[0] ?? null) as GovernanceLaboratory | null
+  },
+
+  async listCoordinatorMembers(): Promise<GovernanceMembership[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_coordinator_members')
+    if (error) throw new Error(`Pesquisadores: ${error.message}`)
+    return (data ?? []) as GovernanceMembership[]
+  },
+
+  async listCoordinatorReports(): Promise<GovernanceReport[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_coordinator_reports')
+    if (error) throw new Error(`Relatos: ${error.message}`)
+    return (data ?? []) as GovernanceReport[]
+  },
+
   async createSignedAudioUrl(audioPath: string): Promise<string | null> {
     const client = requireClient()
-    const { data, error } = await client.storage.from('research-audio').createSignedUrl(audioPath, 3600)
+    const { data, error } = await client.storage.from(BUCKET).createSignedUrl(audioPath, 3600)
     if (error) throw error
     return data?.signedUrl ?? null
+  },
+
+  async createCoordinatorReport(userId: string, authorName: string, draft: WeeklyReportDraft): Promise<void> {
+    const client = requireClient()
+    const audioPath = `${userId}/${draft.id}.${extensionFor(draft.audioMimeType)}`
+    const { error: uploadError } = await client.storage.from(BUCKET).upload(audioPath, draft.audioBlob, {
+      contentType: draft.audioMimeType,
+      upsert: false
+    })
+    if (uploadError) throw new Error(`Áudio: ${uploadError.message}`)
+
+    const { error } = await client.rpc('researchflow_create_coordinator_report', {
+      p_id: draft.id,
+      p_author_name: authorName,
+      p_created_at: draft.createdAt,
+      p_recording_date: draft.recordingDate,
+      p_duration_seconds: Math.round(draft.durationSeconds),
+      p_audio_path: audioPath,
+      p_audio_mime_type: draft.audioMimeType,
+      p_transcript: draft.transcript,
+      p_transcript_status: draft.transcriptStatus,
+      p_period_start: draft.periodStart,
+      p_period_end: draft.periodEnd,
+      p_tag: draft.tag
+    })
+
+    if (error) {
+      await client.storage.from(BUCKET).remove([audioPath])
+      throw new Error(`Relato: ${error.message}`)
+    }
+  },
+
+  async updateCoordinatorTranscript(reportId: string, transcript: string): Promise<void> {
+    const client = requireClient()
+    const { error } = await client.rpc('researchflow_update_coordinator_transcript', {
+      p_report_id: reportId,
+      p_transcript: transcript
+    })
+    if (error) throw error
   },
 
   async createLaboratory(input: {
