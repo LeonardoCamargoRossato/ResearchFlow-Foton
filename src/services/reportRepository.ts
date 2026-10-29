@@ -118,7 +118,8 @@ export const reportRepository = {
     const client = requireClient()
     const { error } = await client.from('research_reports').update({
       status: 'deleted',
-      deleted_by_researcher: true
+      deleted_by_researcher: true,
+      deleted_at: new Date().toISOString()
     }).eq('id', report.id).eq('user_id', report.researcherId)
     if (error) throw error
   }
