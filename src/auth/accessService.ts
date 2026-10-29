@@ -10,11 +10,17 @@ const requireClient = () => {
 const avatarFrom = (user: User) => String(user.user_metadata?.avatar_url || user.user_metadata?.picture || '') || undefined
 const nameFrom = (user: User) => String(user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'Usuário')
 
+const supabaseError = (error: { message?: string; details?: string; hint?: string; code?: string }) => {
+  const parts = [error.message, error.details, error.hint].filter(Boolean)
+  const prefix = error.code ? `[${error.code}] ` : ''
+  return new Error(prefix + (parts.join(' · ') || 'Erro do Supabase.'))
+}
+
 export const accessService = {
   async loadCurrentUser(user: User): Promise<ResearchFlowUser | null> {
     const client = requireClient()
     const { data, error } = await client.rpc('researchflow_claim_membership')
-    if (error) throw error
+    if (error) throw supabaseError(error)
     const row = Array.isArray(data) ? data[0] : data
     if (!row || row.status !== 'active') return null
     if (!['researcher','lab_coordinator','director'].includes(String(row.role))) return null
@@ -36,7 +42,7 @@ export const accessService = {
   async getPendingRequest(userId: string): Promise<AccessRequest | null> {
     const client = requireClient()
     const { data, error } = await client.from('access_requests').select('*').eq('auth_user_id', userId).eq('status', 'pending').maybeSingle()
-    if (error) throw error
+    if (error) throw supabaseError(error)
     return data as AccessRequest | null
   },
 
@@ -51,7 +57,7 @@ export const accessService = {
       message: message.trim() || null
     }
     const { data, error } = await client.from('access_requests').insert(payload).select('*').single()
-    if (error) throw error
+    if (error) throw supabaseError(error)
     try {
       await client.functions.invoke('notify-access-request', { body: { requestId: data.id } })
     } catch {
@@ -63,7 +69,7 @@ export const accessService = {
   async listAccessRequests(): Promise<AccessRequest[]> {
     const client = requireClient()
     const { data, error } = await client.from('access_requests').select('*').order('requested_at', { ascending: false })
-    if (error) throw error
+    if (error) throw supabaseError(error)
     return (data ?? []) as AccessRequest[]
   },
 
@@ -77,7 +83,7 @@ export const accessService = {
       p_vertical_id: null,
       p_notes: null
     })
-    if (error) throw error
+    if (error) throw supabaseError(error)
   },
 
   async rejectAccessRequest(requestId: string, notes?: string) {
@@ -90,6 +96,6 @@ export const accessService = {
       p_vertical_id: null,
       p_notes: notes || null
     })
-    if (error) throw error
+    if (error) throw supabaseError(error)
   }
 }
