@@ -17,6 +17,7 @@ export const accessService = {
     if (error) throw error
     const row = Array.isArray(data) ? data[0] : data
     if (!row || row.status !== 'active') return null
+    if (!['researcher','lab_coordinator','director'].includes(String(row.role))) return null
     return {
       authUserId: user.id,
       membershipId: row.membership_id,
@@ -51,29 +52,12 @@ export const accessService = {
     }
     const { data, error } = await client.from('access_requests').insert(payload).select('*').single()
     if (error) throw error
-    try { await client.functions.invoke('notify-access-request', { body: { requestId: data.id } }) } catch { /* notification is best-effort */ }
+    try {
+      await client.functions.invoke('notify-access-request', { body: { requestId: data.id } })
+    } catch {
+      // Notification is best-effort; the stored request remains valid.
+    }
     return data as AccessRequest
-  },
-
-  async listVisibleMembers() {
-    const client = requireClient()
-    const { data, error } = await client.from('memberships').select('id,email,full_name,role,laboratory_id,vertical_id,status,laboratories(name),research_verticals(name)').eq('status', 'active').order('full_name')
-    if (error) throw error
-    return data ?? []
-  },
-
-  async listVisibleReports() {
-    const client = requireClient()
-    const { data, error } = await client.from('research_reports').select('id,user_id,researcher_name,created_at,duration_seconds,transcript,transcript_status,status,tag,audio_path,deleted_by_researcher').order('created_at', { ascending: false }).limit(100)
-    if (error) throw error
-    return data ?? []
-  },
-
-  async createSignedAudioUrl(audioPath: string): Promise<string | null> {
-    const client = requireClient()
-    const { data, error } = await client.storage.from('research-audio').createSignedUrl(audioPath, 3600)
-    if (error) throw error
-    return data?.signedUrl ?? null
   },
 
   async listAccessRequests(): Promise<AccessRequest[]> {
@@ -83,14 +67,14 @@ export const accessService = {
     return (data ?? []) as AccessRequest[]
   },
 
-  async approveAccessRequest(requestId: string, role: ResearchFlowRole, laboratoryId?: string, verticalId?: string) {
+  async approveAccessRequest(requestId: string, role: ResearchFlowRole, laboratoryId?: string) {
     const client = requireClient()
     const { error } = await client.rpc('researchflow_review_access_request', {
       p_request_id: requestId,
       p_decision: 'approved',
       p_role: role,
       p_laboratory_id: laboratoryId || null,
-      p_vertical_id: verticalId || null,
+      p_vertical_id: null,
       p_notes: null
     })
     if (error) throw error
