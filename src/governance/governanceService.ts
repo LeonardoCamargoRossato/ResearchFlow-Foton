@@ -1,8 +1,12 @@
 import type { WeeklyReportDraft } from '../components/WeeklyReportRecorder'
 import type {
+  AccessStatus,
   GovernanceLaboratory,
   GovernanceMembership,
   GovernanceReport,
+  InstitutionalPerson,
+  InstitutionalRole,
+  LaboratoryCoordinatorRelation,
   MembershipStatus
 } from '../models/ResearchFlowUser'
 import { supabase } from '../services/supabase'
@@ -21,7 +25,7 @@ export const governanceService = {
     const client = requireClient()
     const { data, error } = await client
       .from('laboratories')
-      .select('id,name,slug,description,active,created_at,vertical_id')
+      .select('id,name,slug,subtitle,description,active,institutional,created_at,vertical_id')
       .order('name')
     if (error) throw error
     return (data ?? []) as GovernanceLaboratory[]
@@ -31,7 +35,7 @@ export const governanceService = {
     const client = requireClient()
     const { data, error } = await client
       .from('memberships')
-      .select('id,auth_user_id,email,full_name,role,laboratory_id,vertical_id,status,created_at,updated_at')
+      .select('id,auth_user_id,person_id,email,full_name,role,laboratory_id,vertical_id,status,created_at,updated_at')
       .order('full_name', { ascending: true })
     if (error) throw error
     return (data ?? []) as GovernanceMembership[]
@@ -55,6 +59,13 @@ export const governanceService = {
     return (data ?? []) as GovernanceLaboratory[]
   },
 
+  async listDirectorInstitutionalLaboratories(): Promise<GovernanceLaboratory[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_institutional_laboratories')
+    if (error) throw new Error(`Laboratórios institucionais: ${error.message}`)
+    return (data ?? []) as GovernanceLaboratory[]
+  },
+
   async listDirectorMemberships(): Promise<GovernanceMembership[]> {
     const client = requireClient()
     const { data, error } = await client.rpc('researchflow_director_memberships')
@@ -67,6 +78,40 @@ export const governanceService = {
     const { data, error } = await client.rpc('researchflow_director_reports')
     if (error) throw new Error(`Relatos: ${error.message}`)
     return (data ?? []) as GovernanceReport[]
+  },
+
+  async listDirectorPeople(): Promise<InstitutionalPerson[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_people')
+    if (error) throw new Error(`Pessoas: ${error.message}`)
+    return (data ?? []) as InstitutionalPerson[]
+  },
+
+  async listDirectorLaboratoryCoordinators(): Promise<LaboratoryCoordinatorRelation[]> {
+    const client = requireClient()
+    const { data, error } = await client.rpc('researchflow_director_laboratory_coordinators')
+    if (error) throw new Error(`Coordenadores institucionais: ${error.message}`)
+    return (data ?? []) as LaboratoryCoordinatorRelation[]
+  },
+
+  async updateInstitutionalPerson(input: {
+    personId: string
+    displayName: string
+    titlePrefix?: string
+    institutionalRole: InstitutionalRole
+    email?: string
+    accessStatus: AccessStatus
+  }): Promise<void> {
+    const client = requireClient()
+    const { error } = await client.rpc('researchflow_director_update_person', {
+      p_person_id: input.personId,
+      p_display_name: input.displayName,
+      p_title_prefix: input.titlePrefix || null,
+      p_institutional_role: input.institutionalRole,
+      p_email: input.email?.trim() || null,
+      p_access_status: input.accessStatus
+    })
+    if (error) throw error
   },
 
   async getCoordinatorLaboratory(): Promise<GovernanceLaboratory | null> {
