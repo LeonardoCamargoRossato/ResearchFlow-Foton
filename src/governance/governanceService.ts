@@ -114,6 +114,15 @@ export const governanceService = {
     if (error) throw error
   },
 
+  async setInstitutionalPersonLaboratory(personId: string, laboratoryId: string | null): Promise<void> {
+    const client = requireClient()
+    const { error } = await client.rpc('researchflow_director_set_person_laboratory', {
+      p_person_id: personId,
+      p_laboratory_id: laboratoryId
+    })
+    if (error) throw error
+  },
+
   async getCoordinatorLaboratory(): Promise<GovernanceLaboratory | null> {
     const client = requireClient()
     const { data, error } = await client.rpc('researchflow_coordinator_laboratory')
