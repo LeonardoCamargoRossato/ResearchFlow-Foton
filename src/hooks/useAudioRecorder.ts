@@ -37,6 +37,7 @@ export const useAudioRecorder = () => {
     try {
       setError('')
       setTranscript('')
+      setTranscriptionSupported(true)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
       const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type))
@@ -60,7 +61,10 @@ export const useAudioRecorder = () => {
         setState('recorded')
       }
 
-      const transcription = createLiveTranscription(setTranscript)
+      const transcription = createLiveTranscription(
+        setTranscript,
+        () => setTranscriptionSupported(false)
+      )
       transcriptionRef.current = transcription
       setTranscriptionSupported(transcription.supported)
       transcription.start()
@@ -93,6 +97,7 @@ export const useAudioRecorder = () => {
     setAudioUrl(null)
     setElapsed(0)
     setTranscript('')
+    setTranscriptionSupported(true)
     setError('')
     setState('idle')
   }
