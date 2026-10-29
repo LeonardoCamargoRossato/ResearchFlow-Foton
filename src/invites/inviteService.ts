@@ -37,6 +37,11 @@ export const inviteService = {
     if (error) throw error
     const row = Array.isArray(data) ? data[0] : data
     if (!row) throw new Error('O convite não retornou uma identidade ativada.')
+    try {
+      await client.functions.invoke('notify-invite-accepted', { body: {} })
+    } catch {
+      // Confirmation email is best-effort and never rolls back activation.
+    }
     return row as InviteAcceptance
   },
 
