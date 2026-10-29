@@ -5,10 +5,7 @@
 
 create extension if not exists pgcrypto;
 
--- ---------------------------------------------------------------------------
 -- 1. Collapse functional roles to exactly three levels.
--- Existing vertical coordinators are revoked before the role constraint changes.
--- ---------------------------------------------------------------------------
 update public.memberships
 set status = 'revoked', updated_at = now()
 where role = 'vertical_coordinator' and status <> 'revoked';
@@ -18,53 +15,37 @@ alter table public.memberships
   add constraint memberships_role_check
   check (role in ('researcher','lab_coordinator','director'));
 
--- ---------------------------------------------------------------------------
--- 2. Internal organizational container.
--- Vertical remains a technical parent required by the V2 schema, not a V3 workspace.
--- ---------------------------------------------------------------------------
+-- 2. Internal organizational container. It is not a V3 functional workspace.
 insert into public.research_verticals(name, slug, description, active)
 values ('Instituto Foton — Pesquisa', 'foton-pesquisa', 'Contêiner organizacional interno do ResearchFlow.', true)
 on conflict (slug) do update set active = true;
 
--- ---------------------------------------------------------------------------
 -- 3. Three-level authorization helpers.
--- SECURITY DEFINER prevents recursive RLS lookups. search_path is pinned.
--- ---------------------------------------------------------------------------
 create or replace function public.researchflow_current_role()
-returns text
-language sql stable security definer set search_path = public as $$
-  select role
-  from public.memberships
+returns text language sql stable security definer set search_path = public as $$
+  select role from public.memberships
   where auth_user_id = auth.uid() and status = 'active'
   limit 1
 $$;
 
 create or replace function public.researchflow_current_laboratory_id()
-returns uuid
-language sql stable security definer set search_path = public as $$
-  select laboratory_id
-  from public.memberships
+returns uuid language sql stable security definer set search_path = public as $$
+  select laboratory_id from public.memberships
   where auth_user_id = auth.uid() and status = 'active'
   limit 1
 $$;
 
 create or replace function public.researchflow_is_active_member()
-returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists(
-    select 1 from public.memberships
-    where auth_user_id = auth.uid() and status = 'active'
-  )
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists(select 1 from public.memberships where auth_user_id = auth.uid() and status = 'active')
 $$;
 
 create or replace function public.researchflow_can_read_user(p_user_id uuid)
-returns boolean
-language sql stable security definer set search_path = public as $$
+returns boolean language sql stable security definer set search_path = public as $$
   select case public.researchflow_current_role()
     when 'director' then true
     when 'lab_coordinator' then exists (
-      select 1
-      from public.memberships target
+      select 1 from public.memberships target
       where target.auth_user_id = p_user_id
         and target.role = 'researcher'
         and target.laboratory_id = public.researchflow_current_laboratory_id()
@@ -75,13 +56,11 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.researchflow_can_read_user_text(p_user_id text)
-returns boolean
-language sql stable security definer set search_path = public as $$
+returns boolean language sql stable security definer set search_path = public as $$
   select case
     when public.researchflow_current_role() = 'director' then true
     else exists (
-      select 1
-      from public.memberships target
+      select 1 from public.memberships target
       where target.auth_user_id::text = p_user_id
         and public.researchflow_can_read_user(target.auth_user_id)
     )
@@ -94,20 +73,11 @@ grant execute on function public.researchflow_is_active_member() to authenticate
 grant execute on function public.researchflow_can_read_user(uuid) to authenticated;
 grant execute on function public.researchflow_can_read_user_text(text) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 4. Membership claim: Google/Supabase identity links to a pre-authorized email.
--- ---------------------------------------------------------------------------
+-- 4. First-login membership linking.
 create or replace function public.researchflow_claim_membership()
 returns table (
-  membership_id uuid,
-  email text,
-  full_name text,
-  role text,
-  laboratory_id uuid,
-  laboratory_name text,
-  vertical_id uuid,
-  vertical_name text,
-  status text
+  membership_id uuid, email text, full_name text, role text,
+  laboratory_id uuid, laboratory_name text, vertical_id uuid, vertical_name text, status text
 )
 language plpgsql security definer set search_path = public as $$
 declare
@@ -122,19 +92,15 @@ begin
   where lower(email) = v_email
     and status = 'active'
     and role in ('researcher','lab_coordinator','director')
-  limit 1
-  for update;
+  limit 1 for update;
 
   if not found then return; end if;
-
   if v_membership.auth_user_id is not null and v_membership.auth_user_id <> v_uid then
     raise exception 'Membership already linked to another authenticated account';
   end if;
 
   if v_membership.auth_user_id is null then
-    update public.memberships
-    set auth_user_id = v_uid, updated_at = now()
-    where id = v_membership.id;
+    update public.memberships set auth_user_id = v_uid, updated_at = now() where id = v_membership.id;
   end if;
 
   return query
@@ -151,41 +117,32 @@ $$;
 
 grant execute on function public.researchflow_claim_membership() to authenticated;
 
--- ---------------------------------------------------------------------------
--- 5. RLS: laboratories are scoped to the current three-level hierarchy.
--- ---------------------------------------------------------------------------
+-- 5. RLS: laboratories, memberships and reports.
 alter table public.laboratories enable row level security;
 alter table public.memberships enable row level security;
 alter table public.research_reports enable row level security;
 
--- Remove V2 broad metadata policy and any prior V3 policy names.
 drop policy if exists "Active members can read laboratory metadata" on public.laboratories;
 drop policy if exists "ResearchFlow V3 laboratory read" on public.laboratories;
 drop policy if exists "ResearchFlow V3 laboratory insert" on public.laboratories;
 drop policy if exists "ResearchFlow V3 laboratory update" on public.laboratories;
 
-create policy "ResearchFlow V3 laboratory read"
-on public.laboratories for select to authenticated
+create policy "ResearchFlow V3 laboratory read" on public.laboratories for select to authenticated
 using (
   public.researchflow_current_role() = 'director'
   or id = public.researchflow_current_laboratory_id()
 );
 
--- Raw browser DML is still protected. The UI uses checked SECURITY DEFINER RPCs.
-create policy "ResearchFlow V3 laboratory insert"
-on public.laboratories for insert to authenticated
+create policy "ResearchFlow V3 laboratory insert" on public.laboratories for insert to authenticated
 with check (public.researchflow_current_role() = 'director');
 
-create policy "ResearchFlow V3 laboratory update"
-on public.laboratories for update to authenticated
+create policy "ResearchFlow V3 laboratory update" on public.laboratories for update to authenticated
 using (public.researchflow_current_role() = 'director')
 with check (public.researchflow_current_role() = 'director');
 
--- Membership visibility: own record, own laboratory researchers, or all for director.
 drop policy if exists "Membership hierarchy read" on public.memberships;
 drop policy if exists "ResearchFlow V3 membership read" on public.memberships;
-create policy "ResearchFlow V3 membership read"
-on public.memberships for select to authenticated
+create policy "ResearchFlow V3 membership read" on public.memberships for select to authenticated
 using (
   auth_user_id = auth.uid()
   or public.researchflow_current_role() = 'director'
@@ -196,51 +153,31 @@ using (
   )
 );
 
--- Report reads: researcher own, coordinator own lab researchers, director institution-wide.
 drop policy if exists "ResearchFlow hierarchical report read" on public.research_reports;
 drop policy if exists "ResearchFlow V3 report read" on public.research_reports;
-create policy "ResearchFlow V3 report read"
-on public.research_reports for select to authenticated
+create policy "ResearchFlow V3 report read" on public.research_reports for select to authenticated
 using (public.researchflow_can_read_user(user_id));
 
--- Researcher writes stay researcher-owned only.
 drop policy if exists "Researchers insert own reports" on public.research_reports;
-create policy "Researchers insert own reports"
-on public.research_reports for insert to authenticated
-with check (
-  user_id = auth.uid()
-  and public.researchflow_current_role() = 'researcher'
-);
+create policy "Researchers insert own reports" on public.research_reports for insert to authenticated
+with check (user_id = auth.uid() and public.researchflow_current_role() = 'researcher');
 
 drop policy if exists "Researchers update own reports" on public.research_reports;
-create policy "Researchers update own reports"
-on public.research_reports for update to authenticated
-using (
-  user_id = auth.uid()
-  and public.researchflow_current_role() = 'researcher'
-)
-with check (
-  user_id = auth.uid()
-  and public.researchflow_current_role() = 'researcher'
-);
+create policy "Researchers update own reports" on public.research_reports for update to authenticated
+using (user_id = auth.uid() and public.researchflow_current_role() = 'researcher')
+with check (user_id = auth.uid() and public.researchflow_current_role() = 'researcher');
 
--- ---------------------------------------------------------------------------
 -- 6. Storage remains private and follows the same hierarchy.
--- ---------------------------------------------------------------------------
 drop policy if exists "ResearchFlow hierarchical audio read" on storage.objects;
 drop policy if exists "ResearchFlow V3 audio read" on storage.objects;
-create policy "ResearchFlow V3 audio read"
-on storage.objects for select to authenticated
+create policy "ResearchFlow V3 audio read" on storage.objects for select to authenticated
 using (
   bucket_id = 'research-audio'
   and public.researchflow_can_read_user_text((storage.foldername(name))[1])
 );
+-- Existing researcher-only upload/update/delete policies from V2 remain in force.
 
--- Existing researcher-only upload/update/delete policies from V2 are intentionally preserved.
-
--- ---------------------------------------------------------------------------
--- 7. Director RPC: create a project/laboratory.
--- ---------------------------------------------------------------------------
+-- 7. Director RPC: create project/laboratory.
 create or replace function public.researchflow_create_laboratory(
   p_name text,
   p_description text default null,
@@ -254,15 +191,15 @@ declare
   v_slug text;
   v_coord public.memberships%rowtype;
 begin
-  if public.researchflow_current_role() <> 'director' then
-    raise exception 'Director role required';
-  end if;
+  if public.researchflow_current_role() <> 'director' then raise exception 'Director role required'; end if;
   if trim(coalesce(p_name,'')) = '' then raise exception 'Project name is required'; end if;
 
   select id into v_vertical_id from public.research_verticals where slug = 'foton-pesquisa' limit 1;
   if v_vertical_id is null then raise exception 'Internal ResearchFlow vertical not found'; end if;
 
-  v_slug := regexp_replace(lower(unaccent(trim(p_name))), '[^a-z0-9]+', '-', 'g');
+  v_slug := lower(trim(p_name));
+  v_slug := translate(v_slug, 'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn');
+  v_slug := regexp_replace(v_slug, '[^a-z0-9]+', '-', 'g');
   v_slug := trim(both '-' from v_slug);
   if v_slug = '' then v_slug := 'projeto-' || substr(gen_random_uuid()::text,1,8); end if;
 
@@ -274,15 +211,7 @@ begin
     select * into v_coord from public.memberships where id = p_coordinator_membership_id for update;
     if not found or v_coord.role <> 'lab_coordinator' then raise exception 'Coordinator membership required'; end if;
 
-    update public.memberships
-    set laboratory_id = null, updated_at = now()
-    where role = 'lab_coordinator' and laboratory_id = v_lab_id and id <> p_coordinator_membership_id;
-
-    update public.memberships
-    set laboratory_id = v_lab_id,
-        vertical_id = v_vertical_id,
-        status = 'active',
-        updated_at = now()
+    update public.memberships set laboratory_id = v_lab_id, vertical_id = v_vertical_id, status = 'active', updated_at = now()
     where id = p_coordinator_membership_id;
   end if;
 
@@ -292,9 +221,7 @@ $$;
 
 grant execute on function public.researchflow_create_laboratory(text,text,uuid,boolean) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 8. Director RPC: edit laboratory metadata.
--- ---------------------------------------------------------------------------
+-- 8. Director RPC: edit project/laboratory.
 create or replace function public.researchflow_update_laboratory(
   p_laboratory_id uuid,
   p_name text,
@@ -307,20 +234,15 @@ begin
   if trim(coalesce(p_name,'')) = '' then raise exception 'Project name is required'; end if;
 
   update public.laboratories
-  set name = trim(p_name),
-      description = nullif(trim(coalesce(p_description,'')),''),
-      active = coalesce(p_active,true)
+  set name = trim(p_name), description = nullif(trim(coalesce(p_description,'')),''), active = coalesce(p_active,true)
   where id = p_laboratory_id;
-
   if not found then raise exception 'Laboratory not found'; end if;
 end;
 $$;
 
 grant execute on function public.researchflow_update_laboratory(uuid,text,text,boolean) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 9. Director RPC: assign/change the coordinator using stable membership IDs.
--- ---------------------------------------------------------------------------
+-- 9. Director RPC: assign/change coordinator using a stable membership ID.
 create or replace function public.researchflow_assign_coordinator(
   p_laboratory_id uuid,
   p_coordinator_membership_id uuid
@@ -338,28 +260,18 @@ begin
   select * into v_coord from public.memberships where id = p_coordinator_membership_id for update;
   if not found or v_coord.role <> 'lab_coordinator' then raise exception 'Lab coordinator membership required'; end if;
 
-  update public.memberships
-  set laboratory_id = null, updated_at = now()
-  where role = 'lab_coordinator'
-    and laboratory_id = p_laboratory_id
-    and id <> p_coordinator_membership_id;
+  update public.memberships set laboratory_id = null, updated_at = now()
+  where role = 'lab_coordinator' and laboratory_id = p_laboratory_id and id <> p_coordinator_membership_id;
 
   update public.memberships
-  set laboratory_id = p_laboratory_id,
-      vertical_id = v_vertical_id,
-      status = 'active',
-      updated_at = now()
+  set laboratory_id = p_laboratory_id, vertical_id = v_vertical_id, status = 'active', updated_at = now()
   where id = p_coordinator_membership_id;
 end;
 $$;
 
 grant execute on function public.researchflow_assign_coordinator(uuid,uuid) to authenticated;
 
--- ---------------------------------------------------------------------------
 -- 10. Coordinator RPC: add/invite researcher to caller's own laboratory only.
--- Director may also use it when a lab ID is supplied by calling the director helper later;
--- the coordinator path never trusts a laboratory ID from the browser.
--- ---------------------------------------------------------------------------
 create or replace function public.researchflow_add_researcher(
   p_full_name text,
   p_email text,
@@ -379,8 +291,8 @@ begin
   if p_status not in ('active','invited') then raise exception 'Invalid researcher status'; end if;
 
   select vertical_id into v_vertical_id from public.laboratories where id = v_lab_id;
-
   select * into v_existing from public.memberships where lower(email) = v_email limit 1 for update;
+
   if found then
     if v_existing.role <> 'researcher' then raise exception 'Email already belongs to another ResearchFlow role'; end if;
     if v_existing.laboratory_id is not null and v_existing.laboratory_id <> v_lab_id then
@@ -389,12 +301,8 @@ begin
 
     update public.memberships
     set full_name = coalesce(nullif(trim(coalesce(p_full_name,'')),''), full_name),
-        laboratory_id = v_lab_id,
-        vertical_id = v_vertical_id,
-        status = p_status,
-        updated_at = now()
-    where id = v_existing.id
-    returning id into v_id;
+        laboratory_id = v_lab_id, vertical_id = v_vertical_id, status = p_status, updated_at = now()
+    where id = v_existing.id returning id into v_id;
   else
     insert into public.memberships(email,full_name,role,laboratory_id,vertical_id,status)
     values(v_email,nullif(trim(coalesce(p_full_name,'')),''),'researcher',v_lab_id,v_vertical_id,p_status)
@@ -407,9 +315,7 @@ $$;
 
 grant execute on function public.researchflow_add_researcher(text,text,text) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 11. Coordinator/Director RPC: update basic researcher membership information.
--- ---------------------------------------------------------------------------
+-- 11. Coordinator/Director RPCs: update/remove researcher without deleting history.
 create or replace function public.researchflow_update_researcher(
   p_membership_id uuid,
   p_full_name text,
@@ -421,7 +327,6 @@ declare
   v_role text := public.researchflow_current_role();
 begin
   if p_status not in ('invited','active','suspended','revoked') then raise exception 'Invalid membership status'; end if;
-
   select * into v_target from public.memberships where id = p_membership_id for update;
   if not found or v_target.role <> 'researcher' then raise exception 'Researcher membership not found'; end if;
 
@@ -432,9 +337,7 @@ begin
   end if;
 
   update public.memberships
-  set full_name = coalesce(nullif(trim(coalesce(p_full_name,'')),''), full_name),
-      status = p_status,
-      updated_at = now()
+  set full_name = coalesce(nullif(trim(coalesce(p_full_name,'')),''), full_name), status = p_status, updated_at = now()
   where id = p_membership_id;
 end;
 $$;
@@ -457,37 +360,27 @@ begin
     raise exception 'Insufficient permission';
   end if;
 
-  -- Preserve laboratory relation and auth_user_id so historical reports remain attributable.
-  update public.memberships
-  set status = 'revoked', updated_at = now()
-  where id = p_membership_id;
+  update public.memberships set status = 'revoked', updated_at = now() where id = p_membership_id;
 end;
 $$;
 
 grant execute on function public.researchflow_remove_researcher(uuid) to authenticated;
 
--- Director can activate/suspend/revoke coordinators or other memberships without deleting history.
-create or replace function public.researchflow_update_membership_status(
-  p_membership_id uuid,
-  p_status text
-) returns void
+create or replace function public.researchflow_update_membership_status(p_membership_id uuid, p_status text)
+returns void
 language plpgsql security definer set search_path = public as $$
 begin
   if public.researchflow_current_role() <> 'director' then raise exception 'Director role required'; end if;
   if p_status not in ('invited','active','suspended','revoked') then raise exception 'Invalid membership status'; end if;
 
-  update public.memberships
-  set status = p_status, updated_at = now()
-  where id = p_membership_id;
+  update public.memberships set status = p_status, updated_at = now() where id = p_membership_id;
   if not found then raise exception 'Membership not found'; end if;
 end;
 $$;
 
 grant execute on function public.researchflow_update_membership_status(uuid,text) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 12. Access-request review remains Director-only and now accepts only three roles.
--- ---------------------------------------------------------------------------
+-- 12. Access-request review stays Director-only and accepts only the three V3 roles.
 create or replace function public.researchflow_review_access_request(
   p_request_id uuid,
   p_decision text,
@@ -509,9 +402,7 @@ begin
   if not found then raise exception 'Pending request not found'; end if;
 
   if p_decision = 'rejected' then
-    update public.access_requests
-    set status='rejected', reviewed_at=now(), reviewed_by=auth.uid(), review_notes=p_notes
-    where id=req.id;
+    update public.access_requests set status='rejected', reviewed_at=now(), reviewed_by=auth.uid(), review_notes=p_notes where id=req.id;
     return;
   end if;
 
@@ -536,23 +427,15 @@ begin
     role = excluded.role,
     laboratory_id = excluded.laboratory_id,
     vertical_id = excluded.vertical_id,
-    status = 'active',
-    approved_at = now(),
-    approved_by = auth.uid(),
-    updated_at = now();
+    status = 'active', approved_at = now(), approved_by = auth.uid(), updated_at = now();
 
-  update public.access_requests
-  set status='approved', reviewed_at=now(), reviewed_by=auth.uid(), review_notes=p_notes
-  where id=req.id;
+  update public.access_requests set status='approved', reviewed_at=now(), reviewed_by=auth.uid(), review_notes=p_notes where id=req.id;
 end;
 $$;
 
 grant execute on function public.researchflow_review_access_request(uuid,text,text,uuid,uuid,text) to authenticated;
 
--- ---------------------------------------------------------------------------
--- 13. Initial V3 seed: one project, Director, Coordinator and Researcher.
--- Preserve any valid existing auth_user_id through conflict updates.
--- ---------------------------------------------------------------------------
+-- 13. Seed initial laboratory/project and test memberships.
 do $$
 declare
   v_vertical_id uuid;
@@ -571,38 +454,24 @@ begin
   insert into public.memberships(email,full_name,role,laboratory_id,vertical_id,status,approved_at)
   values('leonardo.rossato@institutofoton.com.br','Leonardo Rossato','director',null,null,'active',now())
   on conflict (lower(email)) do update set
-    full_name = excluded.full_name,
-    role = 'director',
-    laboratory_id = null,
-    vertical_id = null,
-    status = 'active',
-    approved_at = coalesce(public.memberships.approved_at,now()),
-    updated_at = now();
+    full_name = excluded.full_name, role = 'director', laboratory_id = null, vertical_id = null,
+    status = 'active', approved_at = coalesce(public.memberships.approved_at,now()), updated_at = now();
 
   insert into public.memberships(email,full_name,role,laboratory_id,vertical_id,status,approved_at)
   values('leonardo.rossato.coordenador@gmail.com','Leonardo Rossato — Coordenador','lab_coordinator',v_lab_id,v_vertical_id,'active',now())
   on conflict (lower(email)) do update set
-    full_name = excluded.full_name,
-    role = 'lab_coordinator',
-    laboratory_id = v_lab_id,
-    vertical_id = v_vertical_id,
-    status = 'active',
-    approved_at = coalesce(public.memberships.approved_at,now()),
-    updated_at = now();
+    full_name = excluded.full_name, role = 'lab_coordinator', laboratory_id = v_lab_id, vertical_id = v_vertical_id,
+    status = 'active', approved_at = coalesce(public.memberships.approved_at,now()), updated_at = now();
 
   insert into public.memberships(email,full_name,role,laboratory_id,vertical_id,status,approved_at)
   values('leo.c.rossato@gmail.com','Leonardo Rossato','researcher',v_lab_id,v_vertical_id,'active',now())
   on conflict (lower(email)) do update set
-    full_name = excluded.full_name,
-    role = 'researcher',
-    laboratory_id = v_lab_id,
-    vertical_id = v_vertical_id,
-    status = 'active',
-    approved_at = coalesce(public.memberships.approved_at,now()),
-    updated_at = now();
+    full_name = excluded.full_name, role = 'researcher', laboratory_id = v_lab_id, vertical_id = v_vertical_id,
+    status = 'active', approved_at = coalesce(public.memberships.approved_at,now()), updated_at = now();
 
   update public.access_requests
-  set status = 'approved', reviewed_at = coalesce(reviewed_at,now()), review_notes = coalesce(review_notes,'Membership activated by ResearchFlow V3 seed.')
+  set status = 'approved', reviewed_at = coalesce(reviewed_at,now()),
+      review_notes = coalesce(review_notes,'Membership activated by ResearchFlow V3 seed.')
   where lower(email) in (
     'leonardo.rossato@institutofoton.com.br',
     'leonardo.rossato.coordenador@gmail.com',
