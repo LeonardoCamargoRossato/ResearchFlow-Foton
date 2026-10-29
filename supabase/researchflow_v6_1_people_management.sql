@@ -2,6 +2,8 @@
 -- Apply immediately AFTER researchflow_v6_people_invites_structure.sql.
 -- This is intentionally small and rerunnable.
 
+alter table public.people add column if not exists is_test boolean not null default false;
+
 create or replace function public.researchflow_director_set_person_laboratory(
   p_person_id uuid,
   p_laboratory_id uuid default null
@@ -119,3 +121,18 @@ begin
 end; $$;
 
 grant execute on function public.researchflow_assign_coordinator(uuid,uuid) to authenticated;
+
+-- Dedicated development invite profile. It is intentionally not a real Foton person.
+do $$
+declare v_lab_id uuid;
+begin
+  select id into v_lab_id from public.laboratories where slug='computacao-quantica' limit 1;
+  insert into public.people(slug,full_name,display_name,institutional_role,primary_laboratory_id,email,access_status,active,is_test)
+  values('researchflow-invite-test','Perfil de Teste ResearchFlow','Perfil de Teste ResearchFlow','researcher',v_lab_id,null,'not_invited',true,true)
+  on conflict (slug) do update set
+    display_name='Perfil de Teste ResearchFlow',
+    institutional_role='researcher',
+    primary_laboratory_id=v_lab_id,
+    is_test=true,
+    active=true;
+end; $$;
