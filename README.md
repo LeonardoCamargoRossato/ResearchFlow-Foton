@@ -4,23 +4,37 @@ ResearchFlow is the Instituto Foton research activity reporting environment.
 
 Current flow:
 
-**Google Identity → Supabase Auth → ResearchFlow Membership → Role/Scope → PostgreSQL RLS → Authorized research data**
+**Google Identity → Supabase Auth → ResearchFlow Membership → Role/Laboratory Scope → PostgreSQL RLS → Authorized research data**
+
+## V3 functional hierarchy
+
+ResearchFlow V3 has exactly three functional access levels:
+
+```text
+Director / General Management
+        ↓
+Laboratory Coordinator
+        ↓
+Researcher
+```
+
+Projects and laboratories are the same managed research unit. The existing `laboratories` table remains the single source of truth; there is no duplicate project hierarchy.
 
 ## Current functionality
 
 - Google login through Supabase Auth;
 - institutional membership gate after authentication;
 - unauthorized-access screen and access-request flow;
-- four roles: `researcher`, `lab_coordinator`, `vertical_coordinator`, `director`;
-- laboratories and research verticals represented in PostgreSQL;
-- researcher audio recorder and personal report library;
-- editable transcripts;
-- private `research-audio` Supabase Storage bucket;
-- signed audio access;
-- soft deletion for the researcher view;
-- role-aware coordinator/director workspace shells;
-- hierarchical PostgreSQL Row Level Security (RLS);
-- director-only access-request approval/rejection RPC;
+- three roles: `researcher`, `lab_coordinator`, `director`;
+- Director Dashboard with projects/laboratories, coordinators, researchers, reports and access requests;
+- Laboratory Coordinator Dashboard with researcher management and aggregated report library;
+- researcher audio recorder and personal report library preserved;
+- editable researcher transcripts;
+- coordinator/director read-only access to researcher-generated reports;
+- private `research-audio` Supabase Storage bucket and signed audio access;
+- soft deletion preserving governance history;
+- PostgreSQL Row Level Security (RLS) for reports, memberships and laboratories;
+- secure PostgreSQL RPCs for privileged management actions;
 - optional access-request notification Edge Function;
 - responsive UI and GitHub Pages deployment.
 
@@ -37,23 +51,22 @@ Google OAuth
     ↓
 ResearchFlow membership registry
     ↓
-Role + organizational scope
+Three-level role + laboratory scope
     ↓
 PostgreSQL + Row Level Security
     ↓
 Supabase Storage / authorized research reports
 ```
 
-Authentication and authorization are deliberately separate. Google/Supabase proves who the user is; `public.memberships` determines whether that identity is allowed into ResearchFlow and which data it may read.
+Authentication and authorization remain deliberately separate. Google/Supabase proves identity; `public.memberships` determines whether that identity is authorized and which institutional scope it may access.
 
 ## Authorization levels
 
-1. **Researcher** — own reports and own audio.
-2. **Laboratory Coordinator** — researchers/reports in the assigned laboratory, read-only.
-3. **Vertical Coordinator** — laboratories/researchers/reports in the assigned vertical, read-only.
-4. **Director** — institution-wide visibility, read-only for researcher report content in this iteration.
+1. **Researcher** — own recorder, own reports, own audio and own transcript editing.
+2. **Laboratory Coordinator** — own laboratory only; manages its researcher memberships and reads their reports/audio/transcripts.
+3. **Director** — institution-wide structural management and read-only visibility of researcher-generated content.
 
-Actual data authorization is enforced by PostgreSQL RLS and Storage policies, not only by React conditions.
+Actual authorization is enforced by PostgreSQL RLS and checked RPC functions, not only by React conditions.
 
 ## Supabase migrations
 
@@ -62,20 +75,30 @@ Apply in order:
 ```text
 supabase/researchflow_v1.sql
 supabase/researchflow_v2_governance.sql
+supabase/researchflow_v3_three_levels.sql
 ```
 
-V2 adds:
+V3 adds or changes:
 
-- `research_verticals`;
-- `laboratories`;
-- `memberships`;
-- `access_requests`;
-- membership-linking/helper functions;
-- hierarchical report RLS;
-- hierarchical private Storage policies;
-- director approval/rejection RPC.
+- exactly three functional roles;
+- scoped laboratory/member/report RLS;
+- V3 private audio read authorization;
+- secure project/laboratory management RPCs;
+- secure coordinator researcher-management RPCs;
+- initial `Quântica nos Negócios` seed;
+- seeded Director, Coordinator and Researcher test memberships.
 
-See `docs/GOVERNANCE_SETUP.md` for configuration and first-user bootstrap.
+See `docs/V3_SETUP.md` for rollout and acceptance testing.
+
+## Seeded V3 test memberships
+
+| Role | Email | Project / Laboratory |
+| --- | --- | --- |
+| Director | `leonardo.rossato@institutofoton.com.br` | Entire ResearchFlow |
+| Laboratory Coordinator | `leonardo.rossato.coordenador@gmail.com` | Quântica nos Negócios |
+| Researcher | `leo.c.rossato@gmail.com` | Quântica nos Negócios |
+
+These emails are database seed records only. Authorization is not hardcoded in React.
 
 ## Environment variables
 
@@ -88,7 +111,7 @@ VITE_SUPABASE_ANON_KEY=
 
 Never expose a Supabase service-role key, database password, Google client secret or transactional-email API key in the GitHub Pages bundle.
 
-For the optional Edge Function, server-side secrets are documented separately:
+For the optional access-request notification Edge Function:
 
 ```text
 ADMIN_NOTIFICATION_EMAIL
@@ -103,12 +126,14 @@ npm install
 npm run dev
 ```
 
-## Build
+## Validation and build
 
 ```bash
-npm run build
 npm run typecheck
+npm run build
 ```
+
+GitHub Actions runs TypeScript validation before every Pages build.
 
 The Vite base path remains `/ResearchFlow-Foton/`.
 
@@ -122,13 +147,15 @@ OAuth redirects must return to that URL.
 
 ## Deliberately deferred
 
-- AI summaries and production transcription services;
-- KPIs and analytics;
-- Power BI / SharePoint / Microsoft Entra ID;
-- project/publication management;
-- research scoring and gamification;
-- complex final coordinator dashboards.
+- charts and complex analytics;
+- AI summaries;
+- automatic transcription backend;
+- email reminders;
+- performance ranking or research scoring;
+- complex KPIs;
+- project milestones and task management;
+- publication management.
 
-The current governance milestone is:
+The V3 focus is:
 
-**Identity → Membership → Role → Organizational Scope → RLS → Authorized Research Data.**
+**Director → Project/Laboratory → Coordinator → Researchers → Reports**.
