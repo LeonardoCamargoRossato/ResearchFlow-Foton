@@ -3,13 +3,15 @@ export type ReportStatus = 'saved' | 'archived' | 'deleted'
 
 export interface ResearchReport {
   id: string
-  researcherId?: string
+  researcherId: string
   researcherName: string
   createdAt: string
   recordingDate: string
   recordingTime: string
   durationSeconds: number
   audioBlob?: Blob
+  audioPath?: string
+  audioUrl?: string
   audioMimeType?: string
   transcript: string
   transcriptStatus: TranscriptStatus
