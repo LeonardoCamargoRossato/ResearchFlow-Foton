@@ -30,11 +30,11 @@ const Icon = ({ name, size = 20 }: { name: IconName; size?: number }) => {
   return <svg {...common}>{paths[name]}</svg>
 }
 
-const AudioPlayer = ({ blob, url, compact = false }: { blob?: Blob; url?: string; compact?: boolean }) => {
+const AudioPlayer = ({ blob, url, compact = false, durationHint = 0 }: { blob?: Blob; url?: string; compact?: boolean; durationHint?: number }) => {
   const [source, setSource] = useState(url ?? '')
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
-  const [duration, setDuration] = useState(0)
+  const [duration, setDuration] = useState(durationHint)
   const ref = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -43,6 +43,10 @@ const AudioPlayer = ({ blob, url, compact = false }: { blob?: Blob; url?: string
     setSource(nextUrl)
     return () => URL.revokeObjectURL(nextUrl)
   }, [blob, url])
+
+  useEffect(() => {
+    if ((!Number.isFinite(duration) || duration <= 0) && durationHint > 0) setDuration(durationHint)
+  }, [durationHint, duration])
 
   useEffect(() => {
     const pauseOther = (event: Event) => {
@@ -62,11 +66,16 @@ const AudioPlayer = ({ blob, url, compact = false }: { blob?: Blob; url?: string
       void audio.play()
     } else audio.pause()
   }
-  const progress = duration ? (current / duration) * 100 : 0
+  const effectiveDuration = Number.isFinite(duration) && duration > 0 ? duration : durationHint
+  const progress = effectiveDuration ? Math.min(100, (current / effectiveDuration) * 100) : 0
+  const syncDuration = (value: number) => {
+    if (Number.isFinite(value) && value > 0) setDuration(value)
+    else if (durationHint > 0) setDuration(durationHint)
+  }
   return <div className={`audio-player ${compact ? 'compact' : ''}`}>
-    <audio ref={ref} src={source} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)} onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0)} onEnded={() => setPlaying(false)} />
+    <audio ref={ref} src={source} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)} onLoadedMetadata={(e) => syncDuration(e.currentTarget.duration)} onDurationChange={(e) => syncDuration(e.currentTarget.duration)} onEnded={() => setPlaying(false)} />
     <button className="icon-button" onClick={toggle} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'}><Icon name={playing ? 'pause' : 'play'} size={18}/></button>
-    <span className="timecode">{formatDuration(current)} / {formatDuration(duration)}</span>
+    <span className="timecode">{formatDuration(current)} / {formatDuration(effectiveDuration)}</span>
     <div className="progress-track"><span style={{ width: `${progress}%` }}/></div>
   </div>
 }
@@ -122,9 +131,12 @@ function App() {
   const reload = async () => {
     if (!user) return
     setLoading(true)
-    try { setReports(await reportRepository.list(user.id)) }
-    catch { setMessage('Não foi possível carregar sua biblioteca. Verifique a configuração do Supabase.') }
-    finally { setLoading(false) }
+    try {
+      setReports(await reportRepository.list(user.id))
+      setMessage('')
+    } catch {
+      setMessage('Não foi possível carregar sua biblioteca. Verifique a configuração do Supabase.')
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { if (user) void reload(); else setReports([]) }, [user?.id])
@@ -154,7 +166,10 @@ function App() {
       await reload()
       setMessage(`Relato ${report.tag} salvo na sua biblioteca.`)
       recorder.reset(); setDraftTranscriptOpen(false)
-    } catch { setMessage('Não foi possível salvar o relato no Supabase. Confira tabela, Storage e políticas RLS.') }
+    } catch (e) {
+      console.error('ResearchFlow save report failed', e)
+      setMessage('Não foi possível salvar o relato no Supabase. Aplique o hotfix V3.3 e tente novamente.')
+    }
     window.setTimeout(() => setMessage(''), 4500)
   }
 
@@ -191,19 +206,19 @@ function App() {
         <div className="recorder-main"><button className="record-button" onClick={recorder.state === 'recording' ? recorder.stop : recorder.start} disabled={recorder.state === 'recorded'}><Icon name={recorder.state === 'recording' ? 'stop' : 'mic'} size={34}/></button><div><p className="recorder-label">{recorder.state === 'recording' ? 'Gravando' : recorder.state === 'recorded' ? 'Gravação concluída' : 'Pronto para gravar'}</p><h3>{recorder.state === 'recording' ? 'Finalizar gravação' : recorder.state === 'recorded' ? 'Revise antes de salvar' : 'Gravar relato'}</h3><p className="muted">{recorder.state === 'recording' ? 'Fale naturalmente. O cronômetro continua enquanto você grava.' : 'Toque no microfone e faça seu relato semanal.'}</p></div></div>
         <div className="recording-visual"><div className={`waveform ${recorder.state === 'recording' ? 'active' : ''}`}>{Array.from({length:19}).map((_,i)=><i key={i} style={{animationDelay:`${i*60}ms`}}/>)}</div><strong>{formatDuration(recorder.elapsed)}</strong></div>
         {recorder.error && <div className="error-banner">{recorder.error}</div>}
-        {recorder.state === 'recorded' && <div className="review-panel"><AudioPlayer blob={recorder.audioBlob ?? undefined}/><div className="review-actions"><button className="secondary-button" onClick={() => setDraftTranscriptOpen(v=>!v)}><Icon name="file" size={18}/> Ver transcrição</button><button className="secondary-button" onClick={() => { if(window.confirm('Descartar esta gravação e começar novamente?')) { recorder.reset(); setDraftTranscriptOpen(false) } }}><Icon name="redo" size={18}/> Refazer áudio</button><button className="primary-button" onClick={() => void saveDraft()}><Icon name="save" size={18}/> Salvar relato</button></div>{draftTranscriptOpen && <div className="draft-transcript"><div className="section-title-row"><div><span className="eyebrow">Transcrição</span><h4>Revise o texto antes de salvar</h4></div><button className="icon-button" onClick={()=>setDraftTranscriptOpen(false)}><Icon name="close"/></button></div>{!recorder.transcriptionSupported && <p className="support-note">A transcrição automática do navegador não está disponível. Você pode escrever ou corrigir manualmente.</p>}<textarea value={recorder.transcript} onChange={e=>recorder.setTranscript(e.target.value)} rows={8} placeholder="A transcrição aparecerá aqui quando disponível."/></div>}</div>}
+        {recorder.state === 'recorded' && <div className="review-panel"><AudioPlayer blob={recorder.audioBlob ?? undefined} durationHint={recorder.elapsed}/><div className="review-actions"><button className="secondary-button" onClick={() => setDraftTranscriptOpen(v=>!v)}><Icon name="file" size={18}/> Ver transcrição</button><button className="secondary-button" onClick={() => { if(window.confirm('Descartar esta gravação e começar novamente?')) { recorder.reset(); setDraftTranscriptOpen(false) } }}><Icon name="redo" size={18}/> Refazer áudio</button><button className="primary-button" onClick={() => void saveDraft()}><Icon name="save" size={18}/> Salvar relato</button></div>{draftTranscriptOpen && <div className="draft-transcript"><div className="section-title-row"><div><span className="eyebrow">Transcrição</span><h4>Revise o texto antes de salvar</h4></div><button className="icon-button" onClick={()=>setDraftTranscriptOpen(false)}><Icon name="close"/></button></div>{!recorder.transcriptionSupported && <p className="support-note">A transcrição automática do navegador não está disponível. Você pode escrever ou corrigir manualmente.</p>}<textarea value={recorder.transcript} onChange={e=>recorder.setTranscript(e.target.value)} rows={8} placeholder="A transcrição aparecerá aqui quando disponível."/></div>}</div>}
         <div className="recorder-guidance"><p>Grave um relato informal incluindo atividades, testes, resultados, dificuldades, decisões, reuniões, leituras, experimentos, códigos, documentos, próximos passos e bloqueios importantes.</p><strong>Tempo sugerido: 3 a 10 minutos.</strong></div>
       </section>
 
       {message && <div className="toast"><Icon name="check" size={18}/>{message}</div>}
       <section className="library" id="relatos"><div className="library-heading"><div><span className="eyebrow">Biblioteca pessoal</span><h2>Meus Relatos</h2><p>Áudios e transcrições vinculados à sua conta.</p></div><div className="library-count">{reports.length} {reports.length===1?'relato':'relatos'}</div></div>
         <div className="toolbar"><label className="search-box"><Icon name="search" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar relatos"/></label><select value={filter} onChange={e=>setFilter(e.target.value as Filter)}><option value="all">Todos</option><option value="month">Este mês</option><option value="year">Este ano</option></select><select value={sort} onChange={e=>setSort(e.target.value as Sort)}><option value="newest">Mais recentes</option><option value="oldest">Mais antigos</option></select></div>
-        {loading ? <div className="empty-state">Carregando sua biblioteca…</div> : visibleReports.length===0 ? <div className="empty-state"><div className="empty-icon"><Icon name="file" size={30}/></div><h3>{reports.length?'Nenhum relato encontrado.':'Nenhum relato registrado ainda.'}</h3><p>{reports.length?'Ajuste a busca ou os filtros.':'Seu primeiro relato aparecerá aqui depois que você salvar uma gravação.'}</p></div> : <div className="report-table-wrap"><table className="report-table"><thead><tr><th>Relato</th><th>Data</th><th>Horário</th><th>Duração</th><th>Status</th><th>Áudio</th><th>Ações</th></tr></thead><tbody>{visibleReports.map(report=><tr key={report.id}><td data-label="Relato"><button className="report-link" onClick={()=>setSelected(report)}>{report.tag}</button></td><td data-label="Data">{formatDate(report.createdAt)}</td><td data-label="Horário">{formatTime(report.createdAt)}</td><td data-label="Duração">{formatDuration(report.durationSeconds)}</td><td data-label="Status"><span className="status-pill">Salvo</span></td><td data-label="Áudio"><AudioPlayer url={report.audioUrl} compact/></td><td data-label="Ações"><div className="row-actions"><button className="secondary-button mini" onClick={()=>setSelected(report)}>Abrir</button><button className="icon-button danger" onClick={()=>void deleteReport(report)}><Icon name="trash" size={16}/></button></div></td></tr>)}</tbody></table></div>}
+        {loading ? <div className="empty-state">Carregando sua biblioteca…</div> : visibleReports.length===0 ? <div className="empty-state"><div className="empty-icon"><Icon name="file" size={30}/></div><h3>{reports.length?'Nenhum relato encontrado.':'Nenhum relato registrado ainda.'}</h3><p>{reports.length?'Ajuste a busca ou os filtros.':'Seu primeiro relato aparecerá aqui depois que você salvar uma gravação.'}</p></div> : <div className="report-table-wrap"><table className="report-table"><thead><tr><th>Relato</th><th>Data</th><th>Horário</th><th>Duração</th><th>Status</th><th>Áudio</th><th>Ações</th></tr></thead><tbody>{visibleReports.map(report=><tr key={report.id}><td data-label="Relato"><button className="report-link" onClick={()=>setSelected(report)}>{report.tag}</button></td><td data-label="Data">{formatDate(report.createdAt)}</td><td data-label="Horário">{formatTime(report.createdAt)}</td><td data-label="Duração">{formatDuration(report.durationSeconds)}</td><td data-label="Status"><span className="status-pill">Salvo</span></td><td data-label="Áudio"><AudioPlayer url={report.audioUrl} compact durationHint={report.durationSeconds}/></td><td data-label="Ações"><div className="row-actions"><button className="secondary-button mini" onClick={()=>setSelected(report)}>Abrir</button><button className="icon-button danger" onClick={()=>void deleteReport(report)}><Icon name="trash" size={16}/></button></div></td></tr>)}</tbody></table></div>}
       </section>
     </main>
 
     <footer><span>ResearchFlow · Instituto Foton</span><span>Biblioteca protegida por conta</span></footer>
-    {selected && <div className="drawer-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><aside className="drawer"><div className="drawer-header"><div><span className="eyebrow">Relato</span><h2>{selected.tag}</h2></div><button className="icon-button" onClick={()=>setSelected(null)}><Icon name="close"/></button></div><div className="detail-grid"><div><span>Pesquisador</span><strong>{selected.researcherName}</strong></div><div><span>Data</span><strong>{formatDate(selected.createdAt)} · {formatTime(selected.createdAt)}</strong></div><div><span>Duração</span><strong>{formatDuration(selected.durationSeconds)}</strong></div><div><span>Status</span><strong>Salvo</strong></div></div><section className="detail-section"><span className="eyebrow">Áudio</span><AudioPlayer url={selected.audioUrl}/></section><section className="detail-section transcript-section"><span className="eyebrow">Transcrição</span><textarea value={selected.transcript} onChange={e=>setSelected({...selected, transcript:e.target.value})} rows={12}/><button className="primary-button" onClick={()=>void updateSelected()}><Icon name="save" size={18}/> Salvar alterações</button></section></aside></div>}
+    {selected && <div className="drawer-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><aside className="drawer"><div className="drawer-header"><div><span className="eyebrow">Relato</span><h2>{selected.tag}</h2></div><button className="icon-button" onClick={()=>setSelected(null)}><Icon name="close"/></button></div><div className="detail-grid"><div><span>Pesquisador</span><strong>{selected.researcherName}</strong></div><div><span>Data</span><strong>{formatDate(selected.createdAt)} · {formatTime(selected.createdAt)}</strong></div><div><span>Duração</span><strong>{formatDuration(selected.durationSeconds)}</strong></div><div><span>Status</span><strong>Salvo</strong></div></div><section className="detail-section"><span className="eyebrow">Áudio</span><AudioPlayer url={selected.audioUrl} durationHint={selected.durationSeconds}/></section><section className="detail-section transcript-section"><span className="eyebrow">Transcrição</span><textarea value={selected.transcript} onChange={e=>setSelected({...selected, transcript:e.target.value})} rows={12}/><button className="primary-button" onClick={()=>void updateSelected()}><Icon name="save" size={18}/> Salvar alterações</button></section></aside></div>}
   </div>
 }
 
