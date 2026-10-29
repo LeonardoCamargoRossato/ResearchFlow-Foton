@@ -4,6 +4,13 @@
 
 alter table public.people add column if not exists is_test boolean not null default false;
 
+-- Supabase normally installs pgcrypto in the extensions schema. The V6 invite
+-- functions deliberately keep a fixed SECURITY DEFINER search_path, so include
+-- extensions explicitly before any invite token is generated/validated.
+alter function public.researchflow_create_invite(uuid) set search_path = public, extensions;
+alter function public.researchflow_invite_preview(text) set search_path = public, extensions;
+alter function public.researchflow_accept_invite(text) set search_path = public, extensions;
+
 create or replace function public.researchflow_director_set_person_laboratory(
   p_person_id uuid,
   p_laboratory_id uuid default null
