@@ -70,7 +70,7 @@ export function ReportDrawer({ report, onClose, editable=false, onSaveTranscript
 
   return <div className="governance-drawer v3-drawer">
     <button className="drawer-close" onClick={onClose}>×</button>
-    <span className="readonly-badge">{editable?'Relato do coordenador · editável':'Relato do pesquisador · somente leitura'}</span>
+    <span className="readonly-badge">{editable?'Relato do coordenador · editável':`Relato do ${reportTypeLabel(report.report_type).toLowerCase()} · somente leitura`}</span>
     <span className="eyebrow">{reportTypeLabel(report.report_type)}</span>
     <h2>{report.tag}</h2>
     <div className="report-meta-grid">
