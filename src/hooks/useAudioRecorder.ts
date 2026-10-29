@@ -84,6 +84,7 @@ export const useAudioRecorder = () => {
 
   const stop = () => {
     transcriptionRef.current?.stop()
+    if (!transcript.trim()) setTranscriptionSupported(false)
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
   }
 
