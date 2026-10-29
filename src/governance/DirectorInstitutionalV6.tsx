@@ -24,6 +24,7 @@ export const accessStatusLabel: Record<AccessStatus,string> = {
 }
 
 const roleLabel = (role: InstitutionalRole) => role === 'director' ? 'Diretor' : role === 'lab_coordinator' ? 'Coordenador' : role === 'researcher' ? 'Pesquisador' : 'Outro'
+const inviteCacheKey = (inviteId:string) => `researchflow.inviteLink.${inviteId}`
 
 export function AccessStatePill({ status }: { status: AccessStatus }) {
   return <span className={`access-state ${status}`}>{accessStatusLabel[status]}</span>
@@ -115,6 +116,7 @@ export function PeopleAccessPage({ people, labs, relations, invites, onReload }:
     try{
       const created=await inviteService.create(person.id)
       const url=`${window.location.origin}${import.meta.env.BASE_URL}#/invite/${created.token}`
+      window.sessionStorage.setItem(inviteCacheKey(created.inviteId),url)
       setGenerated({person,url,expiresAt:created.expiresAt,inviteId:created.inviteId})
       await onReload()
     }catch(e){setError(e instanceof Error?e.message:'Não foi possível criar o convite.')}
@@ -126,9 +128,10 @@ export function PeopleAccessPage({ people, labs, relations, invites, onReload }:
       <div className="panel-heading"><div><span className="eyebrow">Identidades</span><h2>Pessoas & Acessos</h2><p>Pessoas institucionais podem existir antes de possuir uma conta ResearchFlow.</p></div></div>
       {error&&<div className="error-banner">{error}</div>}
       <div className="data-table"><div className="table-head people-access-cols"><span>Nome</span><span>Cargo</span><span>Laboratório</span><span>E-mail de acesso</span><span>Status</span><span>Ações</span></div>
-        {people.map(p=>{const personLabs=labsForPerson(p.id,labs,relations);const activeInvite=activeInviteFor(p.id);return <div className="table-row people-access-cols" key={p.id}><strong>{p.display_name}</strong><span>{roleLabel(p.institutional_role)}</span><span>{p.institutional_role==='director'?'Instituto Foton':personLabs.map(l=>l.name).join(', ')||'—'}</span><span>{p.email||'E-mail não cadastrado'}</span><AccessStatePill status={p.access_status}/><div className="row-actions">{p.access_status!=='active'&&<button onClick={()=>void createInvite(p)}>{activeInvite?'Regenerar invite':'Criar link de invite'}</button>}{activeInvite&&<button onClick={async()=>{try{await inviteService.revoke(activeInvite.id);await onReload()}catch(e){setError(e instanceof Error?e.message:'Falha ao revogar convite.')}}}>Revogar invite</button>}<button onClick={()=>setEditing(p)}>{p.access_status==='active'?'Gerenciar acesso':'Editar'}</button></div></div>})}
+        {people.map(p=>{const personLabs=labsForPerson(p.id,labs,relations);const activeInvite=activeInviteFor(p.id);const cachedLink=activeInvite?window.sessionStorage.getItem(inviteCacheKey(activeInvite.id)):null;return <div className="table-row people-access-cols" key={p.id}><strong>{p.display_name}</strong><span>{roleLabel(p.institutional_role)}</span><span>{p.institutional_role==='director'?'Instituto Foton':personLabs.map(l=>l.name).join(', ')||'—'}</span><span>{p.email||'E-mail não cadastrado'}</span><AccessStatePill status={p.access_status}/><div className="row-actions">{p.access_status!=='active'&&<button onClick={()=>void createInvite(p)}>{activeInvite?'Regenerar invite':'Criar link de invite'}</button>}{cachedLink&&<button onClick={async()=>{await navigator.clipboard.writeText(cachedLink)}}>Copiar link</button>}{activeInvite&&<button onClick={async()=>{try{await inviteService.revoke(activeInvite.id);window.sessionStorage.removeItem(inviteCacheKey(activeInvite.id));await onReload()}catch(e){setError(e instanceof Error?e.message:'Falha ao revogar convite.')}}}>Revogar invite</button>}<button onClick={()=>setEditing(p)}>{p.access_status==='active'?'Gerenciar acesso':'Editar'}</button></div></div>})}
       </div>
     </section>
+    <section className="governance-panel invite-audit-panel"><div className="panel-heading"><div><span className="eyebrow">Auditoria</span><h3>Histórico de convites</h3></div></div><div className="data-table"><div className="table-head invite-audit-cols"><span>Pessoa</span><span>Status</span><span>Criado em</span><span>Expira em</span><span>Aceito em</span><span>Conta vinculada</span></div>{invites.slice(0,50).map(i=>{const person=people.find(p=>p.id===i.person_id);return <div className="table-row invite-audit-cols" key={i.id}><strong>{person?.display_name||'Pessoa removida'}</strong><span>{i.status}</span><span>{new Date(i.created_at).toLocaleString('pt-BR')}</span><span>{new Date(i.expires_at).toLocaleString('pt-BR')}</span><span>{i.accepted_at?new Date(i.accepted_at).toLocaleString('pt-BR'):'—'}</span><span>{i.accepted_email||'—'}</span></div>})}</div>{!invites.length&&<p className="muted">Nenhum convite gerado ainda.</p>}</section>
     {generated&&<InviteLinkModal data={generated} onClose={()=>setGenerated(null)}/>} 
     {editing&&<EditPersonModal person={editing} labs={labs} relations={relations} onClose={()=>setEditing(null)} onSaved={async()=>{setEditing(null);await onReload()}}/>}
   </>
@@ -139,7 +142,7 @@ function InviteLinkModal({ data, onClose }: { data:{person:InstitutionalPerson;u
   return <GovernanceModal title="Link de invite" onClose={onClose}><div className="modal-form">
     <div className="identity-chip"><strong>{data.person.display_name}</strong><span>Válido até {new Date(data.expiresAt).toLocaleString('pt-BR')}</span></div>
     <label>Link seguro<textarea readOnly value={data.url}/></label>
-    <p className="muted">O token bruto é exibido somente nesta geração. Depois, o ResearchFlow guarda apenas o hash. Se perder o link, gere um novo.</p>
+    <p className="muted">O token bruto fica apenas nesta sessão do navegador. O banco persiste somente o hash SHA-256; se o link for perdido em outra sessão, gere um novo.</p>
     <div className="modal-actions"><button className="secondary-button" onClick={onClose}>Fechar</button><button className="primary-button" onClick={async()=>{await navigator.clipboard.writeText(data.url);setCopied(true)}}>{copied?'Copiado!':'Copiar link'}</button></div>
   </div></GovernanceModal>
 }
