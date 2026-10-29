@@ -6,9 +6,9 @@ Current flow:
 
 **Google Identity → Supabase Auth → ResearchFlow Membership → Role/Laboratory Scope → PostgreSQL RLS → Authorized research data**
 
-## V3 functional hierarchy
+## Functional hierarchy
 
-ResearchFlow V3 has exactly three functional access levels:
+ResearchFlow has exactly three functional access levels:
 
 ```text
 Director / General Management
@@ -27,9 +27,9 @@ Projects and laboratories are the same managed research unit. The existing `labo
 - unauthorized-access screen and access-request flow;
 - three roles: `researcher`, `lab_coordinator`, `director`;
 - Director Dashboard with projects/laboratories, coordinators, researchers, reports and access requests;
-- Laboratory Coordinator Dashboard with researcher management and aggregated report library;
-- researcher audio recorder and personal report library preserved;
-- editable researcher transcripts;
+- Laboratory Coordinator Dashboard with researcher management, aggregated report library and coordinator weekly reports;
+- researcher audio recorder and personal report library;
+- editable own transcripts;
 - coordinator/director read-only access to researcher-generated reports;
 - private `research-audio` Supabase Storage bucket and signed audio access;
 - soft deletion preserving governance history;
@@ -63,7 +63,7 @@ Authentication and authorization remain deliberately separate. Google/Supabase p
 ## Authorization levels
 
 1. **Researcher** — own recorder, own reports, own audio and own transcript editing.
-2. **Laboratory Coordinator** — own laboratory only; manages its researcher memberships and reads their reports/audio/transcripts.
+2. **Laboratory Coordinator** — own laboratory only; manages its researcher memberships, reads their reports/audio/transcripts and creates own coordinator reports.
 3. **Director** — institution-wide structural management and read-only visibility of researcher-generated content.
 
 Actual authorization is enforced by PostgreSQL RLS and checked RPC functions, not only by React conditions.
@@ -76,29 +76,35 @@ Apply in order:
 supabase/researchflow_v1.sql
 supabase/researchflow_v2_governance.sql
 supabase/researchflow_v3_three_levels.sql
+supabase/researchflow_v3_1_claim_membership_fix.sql
+supabase/researchflow_v3_2_personal_library_fix.sql
+supabase/researchflow_v3_3_researcher_write_fix.sql
+supabase/researchflow_v4_coordinator_workspace.sql
+supabase/researchflow_v4_1_director_email.sql
 ```
 
-V3 adds or changes:
+The current patches add or change:
 
 - exactly three functional roles;
 - scoped laboratory/member/report RLS;
-- V3 private audio read authorization;
+- private audio authorization;
 - secure project/laboratory management RPCs;
 - secure coordinator researcher-management RPCs;
 - initial `Quântica nos Negócios` seed;
-- seeded Director, Coordinator and Researcher test memberships.
+- coordinator own weekly reports;
+- current Director membership correction.
 
 See `docs/V3_SETUP.md` for rollout and acceptance testing.
 
-## Seeded V3 test memberships
+## Current test memberships
 
 | Role | Email | Project / Laboratory |
 | --- | --- | --- |
-| Director | `leonardo.rossato@institutofoton.com.br` | Entire ResearchFlow |
+| Director | `institutofotonmais@gmail.com` | Entire ResearchFlow |
 | Laboratory Coordinator | `leonardo.rossato.coordenador@gmail.com` | Quântica nos Negócios |
 | Researcher | `leo.c.rossato@gmail.com` | Quântica nos Negócios |
 
-These emails are database seed records only. Authorization is not hardcoded in React.
+The former Director membership `leonardo.rossato@institutofoton.com.br` is revoked by V4.1. Authorization is not hardcoded in React.
 
 ## Environment variables
 
@@ -156,6 +162,6 @@ OAuth redirects must return to that URL.
 - project milestones and task management;
 - publication management.
 
-The V3 focus is:
+The current hierarchy is:
 
 **Director → Project/Laboratory → Coordinator → Researchers → Reports**.
