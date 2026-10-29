@@ -1,48 +1,36 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { useAudioRecorder } from './hooks/useAudioRecorder'
+import { WeeklyReportRecorder, type WeeklyReportDraft } from './components/WeeklyReportRecorder'
 import type { ResearchReport } from './models/ResearchReport'
 import { reportRepository } from './services/reportRepository'
 import { authService, supabase, supabaseConfigured } from './services/supabase'
-import { createReportIdentity, formatDate, formatDuration, formatTime } from './utils/report'
+import { formatDate, formatDuration, formatTime } from './utils/report'
 
 type Filter = 'all' | 'month' | 'year'
 type Sort = 'newest' | 'oldest'
-type IconName = 'mic' | 'stop' | 'play' | 'pause' | 'save' | 'redo' | 'file' | 'trash' | 'search' | 'close' | 'check' | 'logout' | 'google'
+type IconName = 'play' | 'pause' | 'save' | 'file' | 'trash' | 'search' | 'close' | 'logout' | 'google'
 
 const Icon = ({ name, size = 20 }: { name: IconName; size?: number }) => {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
   const paths: Record<IconName, ReactElement> = {
-    mic: <><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></>,
-    stop: <rect x="6" y="6" width="12" height="12" rx="2"/>,
     play: <path d="m8 5 11 7-11 7Z"/>,
     pause: <><path d="M9 5v14M15 5v14"/></>,
     save: <><path d="M5 21h14a2 2 0 0 0 2-2V7l-4-4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z"/><path d="M7 3v6h10V3M8 21v-8h8v8"/></>,
-    redo: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></>,
     file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></>,
     trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
     close: <path d="M18 6 6 18M6 6l12 12"/>,
-    check: <path d="m5 12 4 4L19 6"/>,
     logout: <><path d="M10 17l5-5-5-5M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></>,
     google: <><circle cx="12" cy="12" r="9"/><path d="M21 12h-9M12 12v4"/></>
   }
   return <svg {...common}>{paths[name]}</svg>
 }
 
-const AudioPlayer = ({ blob, url, compact = false, durationHint = 0 }: { blob?: Blob; url?: string; compact?: boolean; durationHint?: number }) => {
-  const [source, setSource] = useState(url ?? '')
+const AudioPlayer = ({ url, compact = false, durationHint = 0 }: { url?: string; compact?: boolean; durationHint?: number }) => {
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(durationHint)
   const ref = useRef<HTMLAudioElement>(null)
-
-  useEffect(() => {
-    if (!blob) { setSource(url ?? ''); return }
-    const nextUrl = URL.createObjectURL(blob)
-    setSource(nextUrl)
-    return () => URL.revokeObjectURL(nextUrl)
-  }, [blob, url])
 
   useEffect(() => {
     if ((!Number.isFinite(duration) || duration <= 0) && durationHint > 0) setDuration(durationHint)
@@ -57,7 +45,7 @@ const AudioPlayer = ({ blob, url, compact = false, durationHint = 0 }: { blob?: 
     return () => window.removeEventListener('researchflow:audio-play', pauseOther)
   }, [])
 
-  if (!source) return <span className="muted">Áudio indisponível</span>
+  if (!url) return <span className="muted">Áudio indisponível</span>
   const toggle = () => {
     const audio = ref.current
     if (!audio) return
@@ -73,7 +61,7 @@ const AudioPlayer = ({ blob, url, compact = false, durationHint = 0 }: { blob?: 
     else if (durationHint > 0) setDuration(durationHint)
   }
   return <div className={`audio-player ${compact ? 'compact' : ''}`}>
-    <audio ref={ref} src={source} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)} onLoadedMetadata={(e) => syncDuration(e.currentTarget.duration)} onDurationChange={(e) => syncDuration(e.currentTarget.duration)} onEnded={() => setPlaying(false)} />
+    <audio ref={ref} src={url} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)} onLoadedMetadata={(e) => syncDuration(e.currentTarget.duration)} onDurationChange={(e) => syncDuration(e.currentTarget.duration)} onEnded={() => setPlaying(false)} />
     <button className="icon-button" onClick={toggle} aria-label={playing ? 'Pausar áudio' : 'Reproduzir áudio'}><Icon name={playing ? 'pause' : 'play'} size={18}/></button>
     <span className="timecode">{formatDuration(current)} / {formatDuration(effectiveDuration)}</span>
     <div className="progress-track"><span style={{ width: `${progress}%` }}/></div>
@@ -94,7 +82,7 @@ const LoginPage = ({ onLogin, error }: { onLogin: () => void; error: string }) =
       <span className="eyebrow">Instituto Foton</span>
       <h2>Bem-vindo ao ResearchFlow</h2>
       <p>Entre com sua conta Google para acessar seu ambiente e sua biblioteca pessoal de pesquisa.</p>
-      <button className="google-button" onClick={onLogin} disabled={!supabaseConfigured}><Icon name="google"/> Entrar com Google</button>
+      <button className="google-button" onClick={onLogin} disabled={!supabaseConfigured}><Icon name="google"/> <span className="login-button-label">Entrar</span></button>
       {!supabaseConfigured && <div className="config-warning"><strong>Configuração do Supabase pendente.</strong><span>O aplicativo já está preparado. Adicione as variáveis do Supabase no GitHub para habilitar o login.</span></div>}
       {error && <div className="error-banner">{error}</div>}
       <small>Seus relatos ficam associados à conta autenticada e protegidos por políticas de acesso.</small>
@@ -104,13 +92,11 @@ const LoginPage = ({ onLogin, error }: { onLogin: () => void; error: string }) =
 </div>
 
 function App() {
-  const recorder = useAudioRecorder()
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState('')
   const [reports, setReports] = useState<ResearchReport[]>([])
   const [selected, setSelected] = useState<ResearchReport | null>(null)
-  const [draftTranscriptOpen, setDraftTranscriptOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('newest')
@@ -151,26 +137,28 @@ function App() {
     }).sort((a,b) => sort === 'newest' ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt))
   }, [reports, query, filter, sort])
 
-  const saveDraft = async () => {
-    if (!recorder.audioBlob || !user) return
-    const identity = createReportIdentity(), now = new Date(identity.createdAt)
+  const saveResearcherDraft = async (draft: WeeklyReportDraft) => {
+    if (!user) throw new Error('Sessão do pesquisador indisponível.')
     const report: ResearchReport = {
-      ...identity, researcherId: user.id, researcherName, recordingDate: identity.createdAt, recordingTime: identity.createdAt,
-      durationSeconds: recorder.elapsed, audioBlob: recorder.audioBlob, audioMimeType: recorder.audioBlob.type,
-      transcript: recorder.transcript, transcriptStatus: recorder.transcript.trim() ? 'generated' : 'pending', status: 'saved', periodType: 'weekly',
-      periodStart: new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 1).toISOString(),
-      periodEnd: new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 7).toISOString(), tag: identity.tag
+      id:draft.id,
+      tag:draft.tag,
+      createdAt:draft.createdAt,
+      researcherId:user.id,
+      researcherName,
+      recordingDate:draft.recordingDate,
+      recordingTime:draft.recordingDate,
+      durationSeconds:draft.durationSeconds,
+      audioBlob:draft.audioBlob,
+      audioMimeType:draft.audioMimeType,
+      transcript:draft.transcript,
+      transcriptStatus:draft.transcriptStatus,
+      status:'saved',
+      periodType:'weekly',
+      periodStart:draft.periodStart,
+      periodEnd:draft.periodEnd
     }
-    try {
-      await reportRepository.create(report)
-      await reload()
-      setMessage(`Relato ${report.tag} salvo na sua biblioteca.`)
-      recorder.reset(); setDraftTranscriptOpen(false)
-    } catch (e) {
-      console.error('ResearchFlow save report failed', e)
-      setMessage('Não foi possível salvar o relato no Supabase. Aplique o hotfix V3.3 e tente novamente.')
-    }
-    window.setTimeout(() => setMessage(''), 4500)
+    await reportRepository.create(report)
+    await reload()
   }
 
   const updateSelected = async () => {
@@ -197,20 +185,14 @@ function App() {
     </header>
 
     <main>
-      <section className="hero compact-hero" id="novo">
-        <span className="eyebrow">Relato da semana</span><h2>O que aconteceu na sua pesquisa?</h2>
-        <div className="questions"><div><span>01</span><h3>O que você fez durante esta semana?</h3></div><div><span>02</span><h3>O que você pretende fazer na próxima semana?</h3></div></div>
-      </section>
+      <div id="novo">
+        <WeeklyReportRecorder
+          contextText="Grave um relato informal incluindo atividades, testes, resultados, dificuldades, decisões, reuniões, leituras, experimentos, códigos, documentos, próximos passos e bloqueios importantes."
+          onSave={saveResearcherDraft}
+        />
+      </div>
 
-      <section className={`recorder-card ${recorder.state}`} aria-live="polite">
-        <div className="recorder-main"><button className="record-button" onClick={recorder.state === 'recording' ? recorder.stop : recorder.start} disabled={recorder.state === 'recorded'}><Icon name={recorder.state === 'recording' ? 'stop' : 'mic'} size={34}/></button><div><p className="recorder-label">{recorder.state === 'recording' ? 'Gravando' : recorder.state === 'recorded' ? 'Gravação concluída' : 'Pronto para gravar'}</p><h3>{recorder.state === 'recording' ? 'Finalizar gravação' : recorder.state === 'recorded' ? 'Revise antes de salvar' : 'Gravar relato'}</h3><p className="muted">{recorder.state === 'recording' ? 'Fale naturalmente. O cronômetro continua enquanto você grava.' : 'Toque no microfone e faça seu relato semanal.'}</p></div></div>
-        <div className="recording-visual"><div className={`waveform ${recorder.state === 'recording' ? 'active' : ''}`}>{Array.from({length:19}).map((_,i)=><i key={i} style={{animationDelay:`${i*60}ms`}}/>)}</div><strong>{formatDuration(recorder.elapsed)}</strong></div>
-        {recorder.error && <div className="error-banner">{recorder.error}</div>}
-        {recorder.state === 'recorded' && <div className="review-panel"><AudioPlayer blob={recorder.audioBlob ?? undefined} durationHint={recorder.elapsed}/><div className="review-actions"><button className="secondary-button" onClick={() => setDraftTranscriptOpen(v=>!v)}><Icon name="file" size={18}/> Ver transcrição</button><button className="secondary-button" onClick={() => { if(window.confirm('Descartar esta gravação e começar novamente?')) { recorder.reset(); setDraftTranscriptOpen(false) } }}><Icon name="redo" size={18}/> Refazer áudio</button><button className="primary-button" onClick={() => void saveDraft()}><Icon name="save" size={18}/> Salvar relato</button></div>{draftTranscriptOpen && <div className="draft-transcript"><div className="section-title-row"><div><span className="eyebrow">Transcrição</span><h4>Revise o texto antes de salvar</h4></div><button className="icon-button" onClick={()=>setDraftTranscriptOpen(false)}><Icon name="close"/></button></div>{!recorder.transcriptionSupported && <p className="support-note">A transcrição automática do navegador não está disponível. Você pode escrever ou corrigir manualmente.</p>}<textarea value={recorder.transcript} onChange={e=>recorder.setTranscript(e.target.value)} rows={8} placeholder="A transcrição aparecerá aqui quando disponível."/></div>}</div>}
-        <div className="recorder-guidance"><p>Grave um relato informal incluindo atividades, testes, resultados, dificuldades, decisões, reuniões, leituras, experimentos, códigos, documentos, próximos passos e bloqueios importantes.</p><strong>Tempo sugerido: 3 a 10 minutos.</strong></div>
-      </section>
-
-      {message && <div className="toast"><Icon name="check" size={18}/>{message}</div>}
+      {message && <div className="toast">{message}</div>}
       <section className="library" id="relatos"><div className="library-heading"><div><span className="eyebrow">Biblioteca pessoal</span><h2>Meus Relatos</h2><p>Áudios e transcrições vinculados à sua conta.</p></div><div className="library-count">{reports.length} {reports.length===1?'relato':'relatos'}</div></div>
         <div className="toolbar"><label className="search-box"><Icon name="search" size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar relatos"/></label><select value={filter} onChange={e=>setFilter(e.target.value as Filter)}><option value="all">Todos</option><option value="month">Este mês</option><option value="year">Este ano</option></select><select value={sort} onChange={e=>setSort(e.target.value as Sort)}><option value="newest">Mais recentes</option><option value="oldest">Mais antigos</option></select></div>
         {loading ? <div className="empty-state">Carregando sua biblioteca…</div> : visibleReports.length===0 ? <div className="empty-state"><div className="empty-icon"><Icon name="file" size={30}/></div><h3>{reports.length?'Nenhum relato encontrado.':'Nenhum relato registrado ainda.'}</h3><p>{reports.length?'Ajuste a busca ou os filtros.':'Seu primeiro relato aparecerá aqui depois que você salvar uma gravação.'}</p></div> : <div className="report-table-wrap"><table className="report-table"><thead><tr><th>Relato</th><th>Data</th><th>Horário</th><th>Duração</th><th>Status</th><th>Áudio</th><th>Ações</th></tr></thead><tbody>{visibleReports.map(report=><tr key={report.id}><td data-label="Relato"><button className="report-link" onClick={()=>setSelected(report)}>{report.tag}</button></td><td data-label="Data">{formatDate(report.createdAt)}</td><td data-label="Horário">{formatTime(report.createdAt)}</td><td data-label="Duração">{formatDuration(report.durationSeconds)}</td><td data-label="Status"><span className="status-pill">Salvo</span></td><td data-label="Áudio"><AudioPlayer url={report.audioUrl} compact durationHint={report.durationSeconds}/></td><td data-label="Ações"><div className="row-actions"><button className="secondary-button mini" onClick={()=>setSelected(report)}>Abrir</button><button className="icon-button danger" onClick={()=>void deleteReport(report)}><Icon name="trash" size={16}/></button></div></td></tr>)}</tbody></table></div>}
