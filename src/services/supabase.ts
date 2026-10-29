@@ -15,6 +15,8 @@ export const supabase = supabaseConfigured
     })
   : null
 
+export const PENDING_INVITE_KEY = 'researchflow.pendingInviteToken'
+
 export const authService = {
   async getSession(): Promise<Session | null> {
     if (!supabase) return null
@@ -23,14 +25,23 @@ export const authService = {
     return data.session
   },
 
-  async signInWithGoogle(): Promise<void> {
+  async signInWithGoogle(inviteToken?: string): Promise<void> {
     if (!supabase) throw new Error('Supabase ainda não foi configurado neste deploy.')
+    if (inviteToken) window.sessionStorage.setItem(PENDING_INVITE_KEY, inviteToken)
     const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo }
     })
     if (error) throw error
+  },
+
+  getPendingInviteToken(): string | null {
+    return window.sessionStorage.getItem(PENDING_INVITE_KEY)
+  },
+
+  clearPendingInviteToken(): void {
+    window.sessionStorage.removeItem(PENDING_INVITE_KEY)
   },
 
   async signOut(): Promise<void> {
