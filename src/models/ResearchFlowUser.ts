@@ -1,6 +1,7 @@
 export type ResearchFlowRole = 'researcher' | 'lab_coordinator' | 'director'
 
 export type MembershipStatus = 'invited' | 'active' | 'suspended' | 'revoked'
+export type GovernanceReportType = 'researcher' | 'coordinator'
 
 export interface ResearchFlowUser {
   authUserId: string
@@ -64,4 +65,5 @@ export interface GovernanceReport {
   tag: string
   audio_path: string | null
   deleted_by_researcher: boolean
+  report_type: GovernanceReportType
 }
