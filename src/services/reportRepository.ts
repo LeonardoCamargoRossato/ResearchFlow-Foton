@@ -64,10 +64,6 @@ export const reportRepository = {
     const client = requireClient()
     if (!userId) return []
 
-    // Personal researcher library uses a dedicated SECURITY DEFINER RPC that
-    // is hard-scoped to auth.uid(). This avoids coupling the personal view to
-    // the hierarchical coordinator/director RLS helper while preserving strict
-    // per-user isolation.
     const { data, error } = await client.rpc('researchflow_list_my_reports')
     if (error) throw error
     return Promise.all(((data ?? []) as DbReport[]).map(toModel))
@@ -76,30 +72,28 @@ export const reportRepository = {
   async create(report: ResearchReport): Promise<void> {
     const client = requireClient()
     if (!report.audioBlob) throw new Error('Áudio não encontrado.')
+
     const audioPath = `${report.researcherId}/${report.id}.${extensionFor(report.audioMimeType)}`
     const { error: uploadError } = await client.storage
       .from(BUCKET)
       .upload(audioPath, report.audioBlob, { contentType: report.audioMimeType, upsert: false })
     if (uploadError) throw uploadError
 
-    const { error } = await client.from('research_reports').insert({
-      id: report.id,
-      user_id: report.researcherId,
-      researcher_name: report.researcherName,
-      created_at: report.createdAt,
-      recording_date: report.recordingDate,
-      duration_seconds: Math.round(report.durationSeconds),
-      audio_path: audioPath,
-      audio_mime_type: report.audioMimeType,
-      transcript: report.transcript,
-      transcript_status: report.transcriptStatus,
-      status: report.status,
-      period_type: report.periodType,
-      period_start: report.periodStart,
-      period_end: report.periodEnd,
-      tag: report.tag,
-      deleted_by_researcher: false
+    const { error } = await client.rpc('researchflow_create_my_report', {
+      p_id: report.id,
+      p_researcher_name: report.researcherName,
+      p_created_at: report.createdAt,
+      p_recording_date: report.recordingDate,
+      p_duration_seconds: Math.round(report.durationSeconds),
+      p_audio_path: audioPath,
+      p_audio_mime_type: report.audioMimeType ?? null,
+      p_transcript: report.transcript,
+      p_transcript_status: report.transcriptStatus,
+      p_period_start: report.periodStart ?? null,
+      p_period_end: report.periodEnd ?? null,
+      p_tag: report.tag
     })
+
     if (error) {
       await client.storage.from(BUCKET).remove([audioPath])
       throw error
@@ -108,20 +102,18 @@ export const reportRepository = {
 
   async updateTranscript(report: ResearchReport): Promise<void> {
     const client = requireClient()
-    const { error } = await client.from('research_reports').update({
-      transcript: report.transcript,
-      transcript_status: 'edited'
-    }).eq('id', report.id).eq('user_id', report.researcherId)
+    const { error } = await client.rpc('researchflow_update_my_transcript', {
+      p_report_id: report.id,
+      p_transcript: report.transcript
+    })
     if (error) throw error
   },
 
   async softDelete(report: ResearchReport): Promise<void> {
     const client = requireClient()
-    const { error } = await client.from('research_reports').update({
-      status: 'deleted',
-      deleted_by_researcher: true,
-      deleted_at: new Date().toISOString()
-    }).eq('id', report.id).eq('user_id', report.researcherId)
+    const { error } = await client.rpc('researchflow_soft_delete_my_report', {
+      p_report_id: report.id
+    })
     if (error) throw error
   }
 }
