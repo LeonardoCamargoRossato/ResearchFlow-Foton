@@ -21,15 +21,22 @@ declare global {
   }
 }
 
-export const createLiveTranscription = (onText: (text: string) => void): LiveTranscription => {
+export const createLiveTranscription = (
+  onText: (text: string) => void,
+  onUnavailable?: () => void
+): LiveTranscription => {
   const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition
-  if (!Recognition) return { supported: false, start: () => undefined, stop: () => undefined }
+  if (!Recognition) {
+    onUnavailable?.()
+    return { supported: false, start: () => undefined, stop: () => undefined }
+  }
 
   const recognition = new Recognition()
   recognition.lang = 'pt-BR'
   recognition.continuous = true
   recognition.interimResults = true
   let finalText = ''
+  let failed = false
 
   recognition.onresult = (event) => {
     let interim = ''
@@ -41,13 +48,23 @@ export const createLiveTranscription = (onText: (text: string) => void): LiveTra
     onText(`${finalText}${interim}`.trim())
   }
 
-  recognition.onerror = () => undefined
+  recognition.onerror = () => {
+    failed = true
+    onUnavailable?.()
+  }
+
   return {
     supported: true,
     start: () => {
-      try { recognition.start() } catch { /* already running */ }
+      try {
+        recognition.start()
+      } catch {
+        failed = true
+        onUnavailable?.()
+      }
     },
     stop: () => {
+      if (failed) return
       try { recognition.stop() } catch { /* already stopped */ }
     }
   }
