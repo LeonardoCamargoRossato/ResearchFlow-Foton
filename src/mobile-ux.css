@@ -1,0 +1,345 @@
+/* ResearchFlow Foton — mobile-first UX corrections.
+   Loaded after the base styles so desktop behavior remains unchanged. */
+
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+
+  main { width: min(100% - 24px, 760px); }
+
+  /* Compact authenticated header */
+  .topbar {
+    min-height: 60px;
+    padding: 8px 12px;
+    gap: 9px;
+  }
+  .topbar .brand-mark { width: 38px; height: 38px; }
+  .topbar h1 { font-size: 16px; }
+  .topbar p { font-size: 10px; }
+  .topnav { display: none; }
+  .user-area {
+    margin-left: auto;
+    padding-left: 8px;
+    gap: 7px;
+  }
+  .user-copy { display: none; }
+  .user-area img, .avatar-fallback { width: 36px; height: 36px; }
+  .icon-button { width: 44px; height: 44px; }
+
+  /* Landing: brand -> login -> explanation -> questions -> steps */
+  .login-brand {
+    padding: 14px 16px 8px;
+  }
+  .login-brand .brand-mark { width: 40px; height: 40px; }
+  .login-brand strong { font-size: 17px; }
+
+  .login-grid {
+    width: min(100% - 24px, 620px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 8px 0 24px;
+    align-items: stretch;
+  }
+
+  .login-card {
+    order: -1;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 16px;
+    border-radius: 18px;
+    box-shadow: 0 12px 30px rgba(20,70,130,.09);
+  }
+  .login-card > .eyebrow,
+  .login-card > h2,
+  .login-card > p { display: none; }
+  .login-card::before {
+    content: "Acesse seu ambiente de pesquisa.";
+    display: block;
+    margin-bottom: 12px;
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 750;
+  }
+  .google-button {
+    min-height: 56px;
+    margin: 0;
+    border-radius: 13px;
+    font-size: 0;
+    width: 100%;
+  }
+  .google-button svg { display: none; }
+  .google-button::after {
+    content: "Entrar";
+    font-size: 17px;
+    font-weight: 850;
+    letter-spacing: .01em;
+  }
+  .login-card small {
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .config-warning { margin-top: 10px; }
+
+  .login-story {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .login-story > .eyebrow { order: 1; }
+  .login-story > h1 { order: 2; }
+  .login-story > p { order: 3; }
+  .login-questions { order: 4; }
+  .login-flow { order: 5; }
+
+  .login-story h1 {
+    font-size: clamp(2rem, 9.5vw, 2.75rem);
+    line-height: 1.04;
+    margin: 8px 0 12px;
+    letter-spacing: -.045em;
+  }
+  .login-story > p {
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 14px;
+  }
+  .login-questions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 0;
+  }
+  .login-questions p {
+    padding: 12px 13px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  /* Keep all 3 process steps visible; no overflowing connector lines. */
+  .login-flow {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);
+    gap: 6px;
+    align-items: center;
+    margin: 14px 0 0;
+    overflow: visible;
+  }
+  .login-flow i { display: none !important; }
+  .login-flow span {
+    display: grid !important;
+    width: 26px;
+    height: 26px;
+  }
+  .login-flow b {
+    display: block !important;
+    min-width: 0;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .login-page footer {
+    padding: 16px;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  /* Researcher dashboard spacing and touch targets */
+  .hero { padding: 18px 0 10px; }
+  .hero h2 {
+    font-size: clamp(1.8rem, 8vw, 2.35rem);
+    line-height: 1.04;
+    margin: 6px 0 10px;
+  }
+  .questions {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 12px 0 6px;
+  }
+  .questions > div { padding: 11px 12px; border-radius: 13px; }
+  .questions h3 { font-size: 14px; }
+
+  .recorder-card {
+    margin: 8px 0 28px;
+    padding: 16px;
+    gap: 14px;
+    border-radius: 18px;
+  }
+  .recorder-main { gap: 14px; }
+  .record-button { width: 88px; height: 88px; }
+  .recorder-main h3 { font-size: 21px; }
+  .recording-visual { min-height: 78px; padding: 12px; }
+  .recording-visual strong { font-size: 25px; }
+  .recorder-guidance {
+    padding-top: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  .recorder-guidance p { font-size: 12px; }
+
+  .review-panel { padding-top: 14px; }
+  .review-panel > .audio-player::before {
+    content: "Reescutar áudio";
+    grid-column: 1 / -1;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .review-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .primary-button,
+  .secondary-button,
+  .google-button { min-height: 48px; }
+  .review-actions button { width: 100%; }
+
+  .audio-player {
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 10px;
+  }
+  .audio-player .progress-track { grid-column: 1 / -1; }
+  .audio-player .icon-button { width: 46px; height: 46px; }
+  .audio-player.compact {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    padding: 8px;
+  }
+  .audio-player.compact .progress-track { width: 100%; }
+
+  .draft-transcript {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 14px;
+  }
+  .section-title-row h4 { font-size: 18px; }
+  .support-note {
+    font-size: 0;
+    line-height: 1.45;
+  }
+  .support-note::before {
+    content: "Transcrição automática indisponível neste dispositivo.";
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .support-note::after {
+    content: "Adicionar transcrição manualmente";
+    display: inline-flex;
+    margin-top: 8px;
+    padding: 7px 9px;
+    border: 1px solid #d9c886;
+    border-radius: 9px;
+    background: #fff;
+    color: #6c531e;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .draft-transcript textarea,
+  .transcript-section textarea {
+    min-height: 180px;
+    font-size: 16px;
+  }
+
+  /* Mobile library: card rows instead of squeezed desktop columns. */
+  .library { padding-bottom: 36px; }
+  .library-heading {
+    margin-bottom: 12px;
+    gap: 8px;
+  }
+  .library h2 { font-size: 2rem; }
+  .toolbar { gap: 8px; margin-bottom: 12px; }
+  .search-box, .toolbar select { min-height: 48px; }
+  .report-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .report-table,
+  .report-table tbody { display: block; }
+  .report-table tr {
+    display: block;
+    margin: 0 0 12px;
+    padding: 14px;
+    border: 1px solid var(--line) !important;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 7px 20px rgba(20,70,130,.05);
+  }
+  .report-table td {
+    display: grid;
+    grid-template-columns: 92px minmax(0,1fr);
+    gap: 10px;
+    width: 100%;
+    padding: 5px 0;
+    border: 0;
+    align-items: center;
+  }
+  .report-table td::before {
+    font-size: 10px;
+    letter-spacing: .05em;
+  }
+  .report-table td[data-label="Relato"] {
+    display: block;
+    padding-bottom: 9px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #edf2f8;
+  }
+  .report-table td[data-label="Relato"]::before { display: none; }
+  .report-link { font-size: 15px; overflow-wrap: anywhere; }
+  .report-table td[data-label="Áudio"] {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    margin-top: 4px;
+  }
+  .report-table td[data-label="Áudio"]::before { margin-bottom: 2px; }
+  .report-table td[data-label="Ações"] {
+    grid-template-columns: 1fr;
+    margin-top: 4px;
+  }
+  .report-table td[data-label="Ações"]::before { display: none; }
+  .row-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .row-actions .secondary-button { min-height: 44px; }
+  .row-actions .icon-button { width: 44px; height: 44px; }
+
+  /* Report detail: full-screen sheet on phones. */
+  .drawer-backdrop {
+    align-items: stretch;
+    justify-content: stretch;
+    background: rgba(4,23,48,.45);
+  }
+  .drawer {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    padding: 18px 16px 28px;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .drawer-header {
+    position: sticky;
+    top: -18px;
+    z-index: 2;
+    margin: -18px -16px 0;
+    padding: 16px;
+    background: rgba(255,255,255,.96);
+    backdrop-filter: blur(12px);
+  }
+  .detail-grid {
+    grid-template-columns: 1fr;
+    margin: 16px 0;
+    gap: 8px;
+  }
+  .detail-section { margin-top: 20px; }
+  .transcript-section .primary-button { min-height: 50px; }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+}
