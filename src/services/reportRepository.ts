@@ -33,7 +33,8 @@ const toModel = async (row: DbReport): Promise<ResearchReport> => {
   const client = requireClient()
   let audioUrl: string | undefined
   if (row.audio_path) {
-    const { data } = await client.storage.from(BUCKET).createSignedUrl(row.audio_path, 3600)
+    const { data, error } = await client.storage.from(BUCKET).createSignedUrl(row.audio_path, 3600)
+    if (error) throw error
     audioUrl = data?.signedUrl
   }
   return {
@@ -61,13 +62,13 @@ const toModel = async (row: DbReport): Promise<ResearchReport> => {
 export const reportRepository = {
   async list(userId: string): Promise<ResearchReport[]> {
     const client = requireClient()
-    const { data, error } = await client
-      .from('research_reports')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('deleted_by_researcher', false)
-      .neq('status', 'deleted')
-      .order('created_at', { ascending: false })
+    if (!userId) return []
+
+    // Personal researcher library uses a dedicated SECURITY DEFINER RPC that
+    // is hard-scoped to auth.uid(). This avoids coupling the personal view to
+    // the hierarchical coordinator/director RLS helper while preserving strict
+    // per-user isolation.
+    const { data, error } = await client.rpc('researchflow_list_my_reports')
     if (error) throw error
     return Promise.all(((data ?? []) as DbReport[]).map(toModel))
   },
