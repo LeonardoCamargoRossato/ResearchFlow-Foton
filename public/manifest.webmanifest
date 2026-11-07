@@ -1,0 +1,19 @@
+{
+  "name": "ResearchFlow — Instituto Foton",
+  "short_name": "ResearchFlow",
+  "description": "Relatos de pesquisa do Instituto Foton",
+  "id": "/ResearchFlow-Foton/",
+  "start_url": "/ResearchFlow-Foton/",
+  "scope": "/ResearchFlow-Foton/",
+  "display": "standalone",
+  "background_color": "#f3f8fd",
+  "theme_color": "#09264c",
+  "icons": [
+    {
+      "src": "/ResearchFlow-Foton/rf-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
