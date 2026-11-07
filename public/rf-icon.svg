@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ResearchFlow RF</title>
+  <desc id="desc">Monograma RF com órbitas de pesquisa científica, em azul e ciano.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#09264c"/>
+      <stop offset="1" stop-color="#086ad5"/>
+    </linearGradient>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#70e8ff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="191" fill="none" stroke="#58dcff" stroke-opacity=".22" stroke-width="5"/>
+  <g transform="translate(356 139)" fill="none" stroke="#65e8ff" stroke-width="8" stroke-linecap="round">
+    <ellipse rx="61" ry="22" transform="rotate(-35)"/>
+    <ellipse rx="61" ry="22" transform="rotate(35)"/>
+    <ellipse rx="61" ry="22" transform="rotate(90)"/>
+    <circle r="10" fill="#8ff5ff" stroke="none"/>
+  </g>
+  <path d="M99 164h176" stroke="#54d9ff" stroke-width="8" stroke-linecap="round" opacity=".75"/>
+  <text x="256" y="328" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="219" letter-spacing="-10" text-anchor="middle" fill="url(#a)">RF</text>
+  <path d="M166 360h180" stroke="#54d9ff" stroke-width="9" stroke-linecap="round"/>
+</svg>
